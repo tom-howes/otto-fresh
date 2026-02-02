@@ -1,6 +1,6 @@
 from app.models.base import BaseModel, datetime
 
-class WorkspaceRead(BaseModel):
+class Workspace(BaseModel):
   id: str
   installation_id: str
   name: str

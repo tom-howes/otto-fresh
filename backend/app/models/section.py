@@ -1,6 +1,6 @@
 from app.models.base import BaseModel, datetime
 
-class SectionRead(BaseModel):
+class Section(BaseModel):
   id: str
   title: str
   position: int

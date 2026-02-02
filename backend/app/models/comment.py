@@ -1,6 +1,6 @@
 from app.models.base import BaseModel, datetime
 
-class CommentRead(BaseModel):
+class Comment(BaseModel):
   id: str
   content: str
   author_id: str

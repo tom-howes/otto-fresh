@@ -57,18 +57,18 @@
 - [x] Create GitHub App client wrapper
 
 ### Auth Endpoints
-- [ ] `GET /auth/github` - Redirect to GitHub authorization
-- [ ] `GET /auth/github/callback` - Handle OAuth callback
-  - [ ] Exchange code for user access token
-  - [ ] Fetch GitHub user profile
-  - [ ] Create or update user in Firestore
-  - [ ] Generate and return session token/JWT
-- [ ] `POST /auth/logout` - Invalidate session (if using server-side sessions)
+- [x] `GET /auth/github` - Redirect to GitHub authorization
+- [x] `GET /auth/github/callback` - Handle OAuth callback
+  - [x] Exchange code for user access token
+  - [x] Fetch GitHub user profile
+  - [x] Create or update user in Firestore
+  - [x] Generate and return session token/JWT
+- [x] `POST /auth/logout` - Invalidate session (if using server-side sessions)
 
 ### Auth Dependencies
-- [ ] Create `get_current_user` dependency (validates token, returns user)
-- [ ] Create token generation utility
-- [ ] Create token validation utility
+- [x] Create `get_current_user` dependency (validates token, returns user)
+- [x] Create token generation utility
+- [x] Create token validation utility
 
 ---
 

@@ -1,7 +1,7 @@
 from app.models.base import BaseModel, datetime
 from app.models.enums import Priority
 
-class TaskRead(BaseModel):
+class Task(BaseModel):
   id: str
   title: str
   description: str | None

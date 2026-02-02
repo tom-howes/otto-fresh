@@ -1,7 +1,8 @@
 import httpx
 import jwt
 import time
-from app.utils.enums import Status_Codes
+from fastapi import status
+from httpx import Response
 from app.config import (
   GITHUB_APP_ID,
   GITHUB_CLIENT_ID,
@@ -9,21 +10,35 @@ from app.config import (
   GITHUB_PRIVATE_KEY,
   GITHUB_CALLBACK_URL
 )
-from fastapi import status
+from app.types import (
+  JWT,
+  InstallationToken,
+  OAuthUrl,
+  SHA,
+  UserTokens,
+  GitHubUser,
+  GitHubRepo,
+  GitHubRepoOwner,
+  GitHubRef,
+  GitHubFileContent,
+  GitHubContent,
+  SessionPayload,
+  GitHubAppJWTPayload
+)
 
 class GitHubAPIError(Exception):
-  def __init__(self, message, status_code):
+  def __init__(self, message: str, status_code: int):
     self.message = message
     self.status_code = status_code
     super().__init__(self.message)
 
-def handle_error(response, expected_status_code):
+def handle_error(response: Response, expected_status_code: int) -> None:
   if response.status_code != expected_status_code:
     error_data = response.json()
     raise GitHubAPIError(error_data.get("message"), response.status_code)
 
-def generate_jwt():
-  payload = {
+def generate_jwt() -> JWT:
+  payload: GitHubAppJWTPayload = {
     "iat": int(time.time()) - 60,
     "exp": int(time.time()) + 600,
     "iss": GITHUB_APP_ID
@@ -31,7 +46,7 @@ def generate_jwt():
   token = jwt.encode(payload, GITHUB_PRIVATE_KEY, algorithm="RS256")
   return token
 
-async def get_installation_token(installation_id):
+async def get_installation_token(installation_id: str) -> InstallationToken:
   token = generate_jwt()
   url = f"https://api.github.com/app/installations/{installation_id}/access_tokens"
   headers = {
@@ -44,14 +59,14 @@ async def get_installation_token(installation_id):
     data = response.json()
     return data["token"]
 
-def build_oauth_url(state):
+def build_oauth_url(state: str) -> OAuthUrl:
   url = "https://github.com/login/oauth/authorize"
   url += f"?client_id={GITHUB_CLIENT_ID}"
   url += f"&redirect_uri={GITHUB_CALLBACK_URL}"
   url += f"&state={state}"
   return url
 
-async def get_user_access_token(code):
+async def get_user_access_token(code: str) -> UserTokens:
   url = "https://github.com/login/oauth/access_token"
   url += f"?client_id={GITHUB_CLIENT_ID}"
   url += f"&client_secret={GITHUB_CLIENT_SECRET}"
@@ -68,7 +83,7 @@ async def get_user_access_token(code):
       "refresh_token": data.get("refresh_token")
     }
 
-async def get_user_profile(user_access_token):
+async def get_user_profile(user_access_token: str) -> GitHubUser:
   url = "https://api.github.com/user"
   headers = {
     "Authorization": f"Bearer {user_access_token}"
@@ -78,7 +93,7 @@ async def get_user_profile(user_access_token):
     handle_error(response, status.HTTP_200_OK)
     return response.json()
   
-async def list_user_repositories(user_access_token):
+async def list_user_repositories(user_access_token: str) -> list[GitHubRepo]:
   url = "https://api.github.com/user/repos"
   url += "?sort=updated"
   headers = {
@@ -89,7 +104,7 @@ async def list_user_repositories(user_access_token):
     handle_error(response, status.HTTP_200_OK)
     return response.json()
   
-async def get_repository_details(installation_token, owner, repository):
+async def get_repository_details(installation_token: InstallationToken, owner: str, repository: str) -> GitHubRepo:
   url = f"https://api.github.com/repos/{owner}/{repository}"
   headers = {
     "Authorization": f"Bearer {installation_token}"
@@ -100,7 +115,7 @@ async def get_repository_details(installation_token, owner, repository):
     return response.json()
 
 # File contents returned are base64 encoded
-async def get_repository_contents(installation_token, owner, repository, path=""):
+async def get_repository_contents(installation_token: InstallationToken, owner: str, repository: str, path="") -> GitHubContent:
   url = f"https://api.github.com/repos/{owner}/{repository}/contents/{path}"
   headers = {
     "Authorization": f"Bearer {installation_token}"
@@ -110,7 +125,7 @@ async def get_repository_contents(installation_token, owner, repository, path=""
     handle_error(response, status.HTTP_200_OK)
     return response.json()
   
-async def get_default_branch_sha(installation_token, owner, repository, branch):
+async def get_default_branch_sha(installation_token: InstallationToken, owner: str, repository: str, branch: str) -> SHA:
   url = f"https://api.github.com/repos/{owner}/{repository}/git/ref/heads/{branch}"
   headers = {
     "Authorization": f"Bearer {installation_token}"
@@ -121,7 +136,7 @@ async def get_default_branch_sha(installation_token, owner, repository, branch):
     data = response.json()
     return data["object"]["sha"]
   
-async def create_branch(installation_token, owner, repository, branch_name, sha):
+async def create_branch(installation_token: InstallationToken, owner: str, repository: str, branch_name: str, sha: SHA) -> GitHubRef:
   url = f"https://api.github.com/repos/{owner}/{repository}/git/refs"
   headers = {
     "Authorization": f"Bearer {installation_token}"
