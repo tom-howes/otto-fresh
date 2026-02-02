@@ -1,7 +1,7 @@
 import httpx
 import jwt
 import time
-from enum import IntEnum
+from app.utils.enums import Status_Codes
 from app.config import (
   GITHUB_APP_ID,
   GITHUB_CLIENT_ID,
@@ -9,15 +9,18 @@ from app.config import (
   GITHUB_PRIVATE_KEY,
   GITHUB_CALLBACK_URL
 )
+from fastapi import status
 
-class Status_Codes(IntEnum):
-  GET_SUCCESS = 200
-  POST_SUCCESS = 201
+class GitHubAPIError(Exception):
+  def __init__(self, message, status_code):
+    self.message = message
+    self.status_code = status_code
+    super().__init__(self.message)
 
 def handle_error(response, expected_status_code):
   if response.status_code != expected_status_code:
     error_data = response.json()
-    raise Exception(f"GitHub API error: {error_data.get('message')}")
+    raise GitHubAPIError(error_data.get("message"), response.status_code)
 
 def generate_jwt():
   payload = {
@@ -37,7 +40,7 @@ async def get_installation_token(installation_id):
   }
   async with httpx.AsyncClient() as client:
     response = await client.post(url, headers=headers)
-    handle_error(response, Status_Codes.POST_SUCCESS)
+    handle_error(response, status.HTTP_201_CREATED)
     data = response.json()
     return data["token"]
 
@@ -58,7 +61,7 @@ async def get_user_access_token(code):
   }
   async with httpx.AsyncClient() as client:
     response = await client.post(url, headers=headers)
-    handle_error(response, Status_Codes.GET_SUCCESS)
+    handle_error(response, status.HTTP_200_OK)
     data = response.json()
     return {
       "access_token": data["access_token"],
@@ -72,7 +75,7 @@ async def get_user_profile(user_access_token):
   }
   async with httpx.AsyncClient() as client:
     response = await client.get(url, headers=headers)
-    handle_error(response, Status_Codes.GET_SUCCESS)
+    handle_error(response, status.HTTP_200_OK)
     return response.json()
   
 async def list_user_repositories(user_access_token):
@@ -83,7 +86,7 @@ async def list_user_repositories(user_access_token):
   }
   async with httpx.AsyncClient() as client:
     response = await client.get(url, headers=headers)
-    handle_error(response, Status_Codes.GET_SUCCESS)
+    handle_error(response, status.HTTP_200_OK)
     return response.json()
   
 async def get_repository_details(installation_token, owner, repository):
@@ -93,7 +96,7 @@ async def get_repository_details(installation_token, owner, repository):
   }
   async with httpx.AsyncClient() as client:
     response = await client.get(url, headers=headers)
-    handle_error(response, Status_Codes.GET_SUCCESS)
+    handle_error(response, status.HTTP_200_OK)
     return response.json()
 
 # File contents returned are base64 encoded
@@ -104,7 +107,7 @@ async def get_repository_contents(installation_token, owner, repository, path=""
   }
   async with httpx.AsyncClient() as client:
     response = await client.get(url, headers=headers)
-    handle_error(response, Status_Codes.GET_SUCCESS)
+    handle_error(response, status.HTTP_200_OK)
     return response.json()
   
 async def get_default_branch_sha(installation_token, owner, repository, branch):
@@ -114,7 +117,7 @@ async def get_default_branch_sha(installation_token, owner, repository, branch):
   }
   async with httpx.AsyncClient() as client:
     response = await client.get(url, headers=headers)
-    handle_error(response, Status_Codes.GET_SUCCESS)
+    handle_error(response, status.HTTP_200_OK)
     data = response.json()
     return data["object"]["sha"]
   
@@ -129,5 +132,5 @@ async def create_branch(installation_token, owner, repository, branch_name, sha)
   }
   async with httpx.AsyncClient() as client:
     response = await client.post(url, headers=headers, json=body)
-    handle_error(response, Status_Codes.POST_SUCCESS)
+    handle_error(response, status.HTTP_201_CREATED)
     return response.json()
