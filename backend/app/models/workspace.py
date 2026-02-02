@@ -2,6 +2,7 @@ from app.models.base import BaseModel, datetime
 
 class WorkspaceRead(BaseModel):
   id: str
+  installation_id: str
   name: str
   join_code: str
   repo_owner: str
