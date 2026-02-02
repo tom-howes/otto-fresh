@@ -15,9 +15,12 @@ from app.config import (
 from app.types import (
   JWT,
   InstallationToken,
+  InstallationId,
   OAuthUrl,
   OAuthCode,
+  OAuthState,
   SHA,
+  UserAccessToken,
   UserTokens,
   GitHubUser,
   GitHubRepo,
@@ -72,7 +75,7 @@ def generate_jwt() -> JWT:
   token: JWT = jwt.encode(payload, GITHUB_PRIVATE_KEY, algorithm="RS256")
   return token
 
-async def get_installation_token(installation_id: str) -> InstallationToken:
+async def get_installation_token(installation_id: InstallationId) -> InstallationToken:
   """Get an access token for a specific GitHub App installation.
   
   Exchanges the app JWT for an installation-specific token that can
@@ -99,7 +102,7 @@ async def get_installation_token(installation_id: str) -> InstallationToken:
     data = response.json()
     return data["token"]
 
-def build_oauth_url(state: str) -> OAuthUrl:
+def build_oauth_url(state: OAuthState) -> OAuthUrl:
   """Build the GitHub OAuth authorization URL.
   
   Constructs the URL to redirect users to for GitHub login.
@@ -116,7 +119,7 @@ def build_oauth_url(state: str) -> OAuthUrl:
   url += f"&state={state}"
   return url
 
-async def get_user_access_token(code: str) -> UserTokens:
+async def get_user_access_token(code: OAuthCode) -> UserTokens:
   """Exchange an authorization code for user access tokens.
   
   Called after the user authorizes the app on GitHub's OAuth page.
@@ -146,7 +149,7 @@ async def get_user_access_token(code: str) -> UserTokens:
       "refresh_token": data.get("refresh_token")
     }
 
-async def get_user_profile(user_access_token: str) -> GitHubUser:
+async def get_user_profile(user_access_token: UserAccessToken) -> GitHubUser:
   """Fetch the authenticated user's GitHub profile.
   
   Args:
@@ -167,7 +170,7 @@ async def get_user_profile(user_access_token: str) -> GitHubUser:
     handle_error(response, status.HTTP_200_OK)
     return response.json()
 
-async def list_user_repositories(user_access_token: str) -> list[GitHubRepo]:
+async def list_user_repositories(user_access_token: UserAccessToken) -> list[GitHubRepo]:
   """List repositories accessible to the authenticated user.
   
   Returns repositories sorted by most recently updated.

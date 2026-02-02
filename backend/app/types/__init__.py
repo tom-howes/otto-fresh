@@ -1,5 +1,6 @@
 from app.types.github import (
   InstallationToken,
+  InstallationId,
   OAuthUrl,
   OAuthCode,
   OAuthState,

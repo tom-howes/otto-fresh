@@ -5,6 +5,9 @@ from typing import TypedDict, TypeAlias
 InstallationToken: TypeAlias = str
 """Access token for a specific GitHub App installation."""
 
+InstallationId: TypeAlias = str
+"""Unique identifier for a GitHub App installation."""
+
 UserAccessToken: TypeAlias = str
 """OAuth access token for making requests on behalf of a user."""
 
