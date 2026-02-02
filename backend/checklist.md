@@ -14,23 +14,23 @@
   - [x] `/app/config.py` for configuration
 - [x] Create Firebase project and download service account credentials
 - [x] Set up environment variables (.env file, add to .gitignore)
-- [ ] Initialize Firebase Admin SDK connection
+- [x] Initialize Firebase Admin SDK connection
 
 ---
 
 ## Phase 2: Firestore Data Model Setup
 
-- [ ] Plan document structure for Users collection
-- [ ] Plan document structure for Workspaces collection
-- [ ] Plan subcollection structure for Sections (under Workspaces)
-- [ ] Plan subcollection structure for Tasks (under Workspaces)
-- [ ] Plan subcollection structure for Comments (under Tasks)
-- [ ] Create Pydantic models for each entity:
-  - [ ] User (create, read, update schemas)
-  - [ ] Workspace (create, read, update schemas)
-  - [ ] Section (create, read, update schemas)
-  - [ ] Task (create, read, update schemas)
-  - [ ] Comment (create, read, update schemas)
+- [x] Plan document structure for Users collection
+- [x] Plan document structure for Workspaces collection
+- [x] Plan subcollection structure for Sections (under Workspaces)
+- [x] Plan subcollection structure for Tasks (under Workspaces)
+- [x] Plan subcollection structure for Comments (under Tasks)
+- [x] Create Pydantic models for each entity:
+  - [x] User (create, read, update schemas)
+  - [x] Workspace (create, read, update schemas)
+  - [x] Section (create, read, update schemas)
+  - [x] Task (create, read, update schemas)
+  - [x] Comment (create, read, update schemas)
 
 ---
 
