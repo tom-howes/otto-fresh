@@ -54,7 +54,7 @@
   - [x] Client secret
   - [x] Private key path
   - [x] Webhook secret
-- [ ] Create GitHub App client wrapper
+- [x] Create GitHub App client wrapper
 
 ### Auth Endpoints
 - [ ] `GET /auth/github` - Redirect to GitHub authorization
