@@ -36,15 +36,30 @@
 
 ## Phase 3: Authentication
 
-### GitHub OAuth Setup
-- [ ] Register OAuth App on GitHub (get client ID and secret)
-- [ ] Add GitHub credentials to environment variables
-- [ ] Create GitHub OAuth client wrapper
+### GitHub App Setup
+- [x] Create a GitHub App (not OAuth App) in GitHub Developer Settings
+  - [x] Set app name and description
+  - [x] Set homepage URL
+  - [x] Set callback URL for user authentication (`/auth/github/callback`)
+  - [x] Set webhook URL for receiving events (`/webhooks/github`)
+  - [x] Generate and download private key (.pem file)
+  - [x] Set required permissions:
+    - [x] Repository contents: Read and write
+    - [x] Metadata: Read
+  - [x] Subscribe to webhook events:
+    - [x] Push
+- [x] Add GitHub App credentials to environment variables:
+  - [x] App ID
+  - [x] Client ID
+  - [x] Client secret
+  - [x] Private key path
+  - [x] Webhook secret
+- [ ] Create GitHub App client wrapper
 
 ### Auth Endpoints
 - [ ] `GET /auth/github` - Redirect to GitHub authorization
 - [ ] `GET /auth/github/callback` - Handle OAuth callback
-  - [ ] Exchange code for access token
+  - [ ] Exchange code for user access token
   - [ ] Fetch GitHub user profile
   - [ ] Create or update user in Firestore
   - [ ] Generate and return session token/JWT
@@ -76,15 +91,17 @@
 ## Phase 5: Workspace Service & Endpoints
 
 ### Workspace Service
-- [ ] `create_workspace(user_id, repo_info)` - Create workspace with repo
+- [ ] `create_workspace(user_id, repo_info, installation_id)` - Create workspace with repo
 - [ ] `get_workspace(workspace_id)` - Fetch workspace details
 - [ ] `get_workspace_by_join_code(code)` - Find workspace by join code
+- [ ] `get_workspace_by_repo(owner, repo)` - Find workspace by repository (for webhooks)
 - [ ] `generate_join_code()` - Generate unique join code
 - [ ] `add_member(workspace_id, user_id)` - Add user to workspace
 - [ ] `remove_member(workspace_id, user_id)` - Remove user from workspace
 - [ ] `get_members(workspace_id)` - List workspace members
 - [ ] `is_member(workspace_id, user_id)` - Check membership
 - [ ] `initialize_default_sections(workspace_id)` - Create TO DO, IN PROGRESS, IN REVIEW, DONE
+- [ ] `update_installation_id(workspace_id, installation_id)` - Update GitHub App installation
 
 ### Workspace Membership Dependency
 - [ ] Create `verify_workspace_membership` dependency
@@ -103,17 +120,38 @@
 
 ## Phase 6: GitHub Integration
 
-### GitHub Client
+### GitHub App Client
+- [ ] Create GitHub App authentication utilities
+  - [ ] Generate JWT from private key for app authentication
+  - [ ] Get installation access token for a specific installation
 - [ ] Create GitHub API client wrapper
-- [ ] `get_user_repos(access_token)` - List user's repositories
-- [ ] `get_repo(access_token, owner, repo)` - Get repository details
-- [ ] `check_repo_permissions(access_token, owner, repo)` - Verify user has push access
-- [ ] `get_default_branch_sha(access_token, owner, repo)` - Get HEAD SHA
-- [ ] `create_branch(access_token, owner, repo, branch_name, sha)` - Create new branch
+- [ ] `get_user_repos(user_access_token)` - List user's repositories
+- [ ] `get_repo(installation_token, owner, repo)` - Get repository details
+- [ ] `check_repo_permissions(user_access_token, owner, repo)` - Verify user has access
+- [ ] `get_default_branch_sha(installation_token, owner, repo)` - Get HEAD SHA
+- [ ] `create_branch(installation_token, owner, repo, branch_name, sha)` - Create new branch
+- [ ] `get_repo_contents(installation_token, owner, repo, path)` - Read file contents for RAG
+
+### GitHub App Installation Flow
+- [ ] `GET /github/install` - Redirect user to GitHub App installation page
+- [ ] `GET /github/install/callback` - Handle post-installation redirect
+  - [ ] Store installation ID with workspace
+  - [ ] Verify installation has required permissions
 
 ### GitHub Endpoints
 - [ ] `GET /github/repos` - List user's repositories for selection
 - [ ] `GET /github/repos/{owner}/{repo}` - Get repository details
+
+### Webhook Handler
+- [ ] `POST /webhooks/github` - Receive GitHub webhook events
+  - [ ] Verify webhook signature using webhook secret
+  - [ ] Parse event type from headers
+  - [ ] Handle `push` events:
+    - [ ] Check if push is to default/main branch
+    - [ ] Identify which workspace the repository belongs to
+    - [ ] Trigger RAG pipeline for the repository
+  - [ ] Handle `installation` events (app installed/uninstalled)
+  - [ ] Return 200 OK promptly (process async if needed)
 
 ---
 
@@ -224,6 +262,36 @@
 - [ ] Set up logging
 - [ ] Create Dockerfile (optional)
 - [ ] Set up CI/CD pipeline (optional)
+
+---
+
+## Phase 13: RAG Pipeline Integration
+
+### RAG Service
+- [ ] Create RAG pipeline service module
+- [ ] `trigger_rag_pipeline(workspace_id, repo_owner, repo_name)` - Main entry point
+- [ ] `fetch_repository_contents(installation_token, owner, repo)` - Clone or fetch repo files
+- [ ] `chunk_repository_data(files)` - Split code/docs into chunks
+- [ ] `generate_embeddings(chunks)` - Create vector embeddings
+- [ ] `store_embeddings(workspace_id, embeddings)` - Save to vector database
+
+### Vector Database Setup
+- [ ] Choose vector database (Pinecone, Weaviate, Chroma, etc.)
+- [ ] Set up vector database connection
+- [ ] Create index/collection for workspace embeddings
+- [ ] Add vector database credentials to environment variables
+
+### Background Processing
+- [ ] Set up async task processing (Celery, FastAPI BackgroundTasks, or similar)
+- [ ] Handle long-running RAG pipeline without blocking webhook response
+- [ ] Add status tracking for RAG pipeline jobs
+- [ ] Handle errors and retries gracefully
+
+### RAG Query Endpoint (optional)
+- [ ] `POST /workspaces/{workspace_id}/query` - Query the RAG system
+  - [ ] Accept natural language question
+  - [ ] Search vector database for relevant chunks
+  - [ ] Return context for LLM or LLM-generated response
 
 ---
 
