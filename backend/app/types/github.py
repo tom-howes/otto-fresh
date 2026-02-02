@@ -5,12 +5,26 @@ from typing import TypedDict, TypeAlias
 InstallationToken: TypeAlias = str
 """Access token for a specific GitHub App installation."""
 
+UserAccessToken: TypeAlias = str
+"""OAuth access token for making requests on behalf of a user."""
+
 OAuthUrl: TypeAlias = str
 """GitHub OAuth authorization URL."""
+
+OAuthCode: TypeAlias = str
+"""Authorization code received from GitHub OAuth callback."""
+
+OAuthState: TypeAlias = str
+"""CSRF protection token for OAuth flow validation."""
 
 SHA: TypeAlias = str
 """Git commit SHA hash."""
 
+UserId: TypeAlias = str
+"""Unique identifier for a user (GitHub user ID)."""
+
+RepositoryId: TypeAlias = str
+"""Unique identifier for a repository (GitHub repository ID)."""
 
 class UserTokens(TypedDict):
     """OAuth tokens returned after user authorization.
@@ -19,8 +33,8 @@ class UserTokens(TypedDict):
         access_token: Token for making API requests on behalf of the user.
         refresh_token: Token for refreshing the access token when it expires.
     """
-    access_token: str
-    refresh_token: str | None
+    access_token: UserAccessToken
+    refresh_token: UserAccessToken | None
 
 
 class GitHubUser(TypedDict):
@@ -42,7 +56,7 @@ class GitHubUser(TypedDict):
         created_at: Account creation timestamp.
         updated_at: Last profile update timestamp.
     """
-    id: int
+    id: UserId
     login: str
     email: str | None
     avatar_url: str
@@ -66,7 +80,7 @@ class GitHubRepoOwner(TypedDict):
         login: Owner's GitHub username.
         avatar_url: URL to the owner's profile picture.
     """
-    id: int
+    id: UserId
     login: str
     avatar_url: str
 
@@ -88,7 +102,7 @@ class GitHubRepo(TypedDict):
         updated_at: Last update timestamp.
         pushed_at: Last push timestamp.
     """
-    id: int
+    id: RepositoryId
     name: str
     full_name: str
     private: bool
@@ -146,7 +160,7 @@ class GitHubFileContent(TypedDict):
     """
     name: str
     path: str
-    sha: str
+    sha: SHA
     size: int
     type: str
     content: str | None

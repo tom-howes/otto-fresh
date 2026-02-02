@@ -5,8 +5,8 @@ from app.config import (
   FIREBASE_PROJECT_ID
 )
 
+# Initialize Firebase Admin SDK Connection
 cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
 firebase_admin.initialize_app(cred)
-
 db = firestore.AsyncClient(project=FIREBASE_PROJECT_ID)
 
