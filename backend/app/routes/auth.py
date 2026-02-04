@@ -16,8 +16,8 @@ from app.types import UserId, OAuthState, OAuthCode, JWT
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-@router.get("/github", status_code=status.HTTP_307_TEMPORARY_REDIRECT, tags=["Authentication"])
-async def github_authenticate() -> RedirectResponse:
+@router.get("/login", status_code=status.HTTP_307_TEMPORARY_REDIRECT, tags=["Authentication"])
+async def login() -> RedirectResponse:
   """Initiate GitHub OAuth authentication flow.
   
   Generates a CSRF state token, stores it in a cookie, and redirects

@@ -5,3 +5,4 @@ httpx
 firebase-admin
 python-dotenv
 PyJWT[crypto]
+google-auth
