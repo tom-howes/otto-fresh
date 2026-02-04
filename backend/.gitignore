@@ -6,3 +6,6 @@ firebase-credentials.json
 
 # Github Private Key
 otto-private-key.pem
+
+# Pycache
+*.pyc
