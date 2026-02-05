@@ -118,3 +118,12 @@ cd frontend && npm test
 docker build -t otto-backend ./backend
 docker build -t otto-ml ./ml
 ```
+
+## Cloud Setup
+
+1. Clone the repo: `git clone https://github.com/otto-pm/otto.git`
+2. Authenticate with GCP: `gcloud auth login`
+3. Set the project: `gcloud config set project otto-pm`
+4. Run the setup script:
+   - **Windows:** `setup-env.bat`
+   - **Mac/Linux:** `chmod +x setup-env.sh && ./setup-env.sh`
