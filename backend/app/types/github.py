@@ -23,10 +23,10 @@ OAuthState: TypeAlias = str
 SHA: TypeAlias = str
 """Git commit SHA hash."""
 
-UserId: TypeAlias = str
+UserId: TypeAlias = int
 """Unique identifier for a user (GitHub user ID)."""
 
-RepositoryId: TypeAlias = str
+RepositoryId: TypeAlias = int
 """Unique identifier for a repository (GitHub repository ID)."""
 
 class UserTokens(TypedDict):
