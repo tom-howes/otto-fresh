@@ -170,30 +170,6 @@ async def get_user_profile(user_access_token: UserAccessToken) -> GitHubUser:
     handle_error(response, status.HTTP_200_OK)
     return response.json()
 
-async def list_user_repositories(user_access_token: UserAccessToken) -> list[GitHubRepo]:
-  """List repositories accessible to the authenticated user.
-  
-  Returns repositories sorted by most recently updated.
-  
-  Args:
-      user_access_token: OAuth access token for the user.
-      
-  Returns:
-      List of repository objects the user can access.
-      
-  Raises:
-      GitHubAPIError: If the request fails.
-  """
-  url = "https://api.github.com/user/repos"
-  url += "?sort=updated"
-  headers = {
-    "Authorization": f"Bearer {user_access_token}"
-  }
-  async with httpx.AsyncClient() as client:
-    response = await client.get(url, headers=headers)
-    handle_error(response, status.HTTP_200_OK)
-    return response.json()
-
 async def get_repository_details(installation_token: InstallationToken, owner: str, repository: str) -> GitHubRepo:
   """Get detailed information about a repository.
   
@@ -243,6 +219,48 @@ async def get_repository_contents(installation_token: InstallationToken, owner: 
     response = await client.get(url, headers=headers)
     handle_error(response, status.HTTP_200_OK)
     return response.json()
+  
+async def list_installation_repositories(installation_token: InstallationToken) -> list[GitHubRepo]:
+  """List all repositories accessible to a GitHub App installation.
+  
+  Args:
+      installation_token: Access token for the installation.
+      
+  Returns:
+      List of all repositories the installation can access.
+      
+  Raises:
+      GitHubAPIError: If the request fails.
+  """
+  all_repos = []
+  page = 1
+  per_page = 100
+  
+  headers = {
+    "Authorization": f"Bearer {installation_token}",
+    "Accept": "application/vnd.github+json"
+  }
+  
+  async with httpx.AsyncClient() as client:
+    while True:
+      url = f"https://api.github.com/installation/repositories?per_page={per_page}&page={page}"
+      response = await client.get(url, headers=headers)
+      handle_error(response, status.HTTP_200_OK)
+      
+      data = response.json()
+      repos = data.get("repositories", [])
+      
+      if not repos:
+        break
+          
+      all_repos.extend(repos)
+      
+      if len(repos) < per_page:
+        break
+          
+      page += 1
+  
+  return all_repos
 
 async def get_default_branch_sha(installation_token: InstallationToken, owner: str, repository: str, branch: str) -> SHA:
   """Get the latest commit SHA of a branch.

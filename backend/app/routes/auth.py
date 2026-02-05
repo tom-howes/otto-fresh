@@ -12,7 +12,7 @@ from app.clients.github import (
   get_user_access_token,
   GitHubAPIError
 )
-from app.types import UserId, OAuthState, OAuthCode, JWT
+from app.types import UserId, OAuthState, OAuthCode, JWT, InstallationId
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -41,7 +41,13 @@ async def login() -> RedirectResponse:
 
 
 @router.get("/github/callback", status_code=status.HTTP_307_TEMPORARY_REDIRECT, tags=["Authentication"])
-async def github_callback(code: OAuthCode, state: OAuthState, request: Request) -> RedirectResponse:
+async def github_callback(
+    request: Request,
+    code: OAuthCode,
+    state: OAuthState | None = None,
+    installation_id: InstallationId | None = None,
+    setup_action: str | None = None
+) -> RedirectResponse:
   """Handle GitHub OAuth callback after user authorization.
   
   Validates the state parameter, exchanges the authorization code for
@@ -61,12 +67,13 @@ async def github_callback(code: OAuthCode, state: OAuthState, request: Request) 
       HTTPException: 500 if user data update fails.
       HTTPException: 502 if GitHub API communication fails.
   """
-  if not code or not state:
+  if not code:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Authorization failed")
   
-  stored_state: OAuthState = request.cookies.get("oauth_state")
-  if not stored_state or stored_state != state:
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state")
+  if not installation_id:
+    stored_state: OAuthState = request.cookies.get("oauth_state")
+    if not state or not stored_state or stored_state != state:
+      raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state")
   
   try:
     token_object = await get_user_access_token(code)
@@ -80,9 +87,9 @@ async def github_callback(code: OAuthCode, state: OAuthState, request: Request) 
   try:
     user_ref = db.collection("users").document(str(user_profile["id"]))
     user_doc = await user_ref.get()
-    
     if user_doc.exists:
       await user_ref.update({
+        "installation_id": installation_id,
         "github_access_token": token_object["access_token"],
         "github_refresh_token": token_object["refresh_token"],
         "updated_at": datetime.now()
