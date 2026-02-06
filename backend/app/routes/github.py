@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from app.dependencies.auth import get_current_user
 from app.clients.github import get_installation_token, list_installation_repositories, GitHubAPIError
-from app.models.user import User
+from app.models import User
 from app.types import GitHubRepo
 
 router = APIRouter(prefix="/github", tags=["GitHub"])
@@ -17,7 +17,7 @@ async def install_github_app(current_user: User = Depends(get_current_user)) -> 
   install_url = "https://github.com/apps/ottopm/installations/new"
   return RedirectResponse(url=install_url)
 
-@router.get("/repos/installed", status_code=status.HTTP_200_OK)
+@router.get("/repos", status_code=status.HTTP_200_OK)
 async def get_installed_repos(current_user: User = Depends(get_current_user)) -> list[GitHubRepo]:
   """List repositories where the GitHub App is installed.
     

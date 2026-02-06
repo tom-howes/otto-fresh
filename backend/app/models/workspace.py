@@ -2,6 +2,10 @@
 
 from app.models.base import BaseModel, datetime
 from app.types import InstallationId, UserId
+from typing import TypeAlias
+
+WorkspaceId: TypeAlias = str
+"""Unique identifier for a workspace."""
 
 class Workspace(BaseModel):
   """Complete workspace data returned from the API.
@@ -20,7 +24,7 @@ class Workspace(BaseModel):
       created_at: Timestamp when the workspace was created.
       updated_at: Timestamp when the workspace was last modified.
   """
-  id: str
+  id: WorkspaceId
   installation_id: InstallationId
   name: str
   join_code: str

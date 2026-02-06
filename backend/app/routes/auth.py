@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request, HTTPException, status
 from fastapi.responses import RedirectResponse, JSONResponse
 from app.utils.auth import generate_session_token
-from app.clients.firebase import db
+from app.services.user import get_user_by_id, create_user, update_user
 import secrets
 from datetime import datetime
 from app.clients.github import (
@@ -12,6 +12,7 @@ from app.clients.github import (
   get_user_access_token,
   GitHubAPIError
 )
+from app.models import UserUpdate, UserCreate
 from app.types import UserId, OAuthState, OAuthCode, JWT, InstallationId
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -67,6 +68,7 @@ async def github_callback(
       HTTPException: 500 if user data update fails.
       HTTPException: 502 if GitHub API communication fails.
   """
+
   if not code:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Authorization failed")
   
@@ -85,34 +87,39 @@ async def github_callback(
     raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="GitHub connection failed")
   
   try:
-    user_ref = db.collection("users").document(str(user_profile["id"]))
-    user_doc = await user_ref.get()
-    if user_doc.exists:
-      await user_ref.update({
-        "installation_id": installation_id,
-        "github_access_token": token_object["access_token"],
-        "github_refresh_token": token_object["refresh_token"],
-        "updated_at": datetime.now()
-      })
+    user_id = str(user_profile["id"])
+    existing_user = await get_user_by_id(user_id)
+
+    if existing_user:
+      update_data = UserUpdate(
+        github_access_token=token_object["access_token"],
+        github_refresh_token=token_object["refresh_token"],
+        installation_id=installation_id if installation_id else None
+      )
+      await update_user(user_id, update_data)
+      has_installation = installation_id or existing_user.get("installation_id")
     else:
-      await user_ref.set({
-        "id": str(user_profile["id"]),
-        "github_username": user_profile["login"],
-        "email": user_profile.get("email"),
-        "avatar_url": user_profile["avatar_url"],
-        "github_access_token": token_object["access_token"],
-        "github_refresh_token": token_object["refresh_token"],
-        "workspace_ids": [],
-        "created_at": datetime.now(),
-        "updated_at": datetime.now()
-      })
+      new_user = UserCreate(
+        id=user_id,
+        github_username=user_profile["login"],
+        email=user_profile.get("email"),
+        avatar_url=user_profile["avatar_url"],
+        github_access_token=token_object["access_token"],
+        github_refresh_token=token_object["refresh_token"],
+        installation_id=installation_id
+      )
+      await create_user(new_user)
+      has_installation = installation_id is not None
   except Exception as e:
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="User data update failed")
   
-  user_id: UserId = str(user_profile["id"])
   session_token: JWT = generate_session_token(user_id)
+
+  if has_installation:
+    redirect_url = "http://localhost:3000/dashboard"
+  else:
+    redirect_url = "http://localhost:8000/github/install"
   
-  redirect_url = "http://localhost:3000/dashboard"
   response = RedirectResponse(redirect_url)
   response.delete_cookie("oauth_state")
   response.set_cookie(
