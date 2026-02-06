@@ -69,6 +69,7 @@ class UserUpdate(BaseModel):
       avatar_url: URL to the user's GitHub profile picture.
       github_access_token: OAuth token for GitHub API access.
       github_refresh_token: Token for refreshing the access token.
+      workspace_ids: List of workspace IDs the user belongs to.
       installation_id: GitHub App installation ID.
   """
   github_username: str | None = None
@@ -76,4 +77,5 @@ class UserUpdate(BaseModel):
   avatar_url: str | None = None
   github_access_token: UserAccessToken | None = None
   github_refresh_token: UserAccessToken | None = None
+  workspace_ids: list[WorkspaceId]
   installation_id: InstallationId | None = None
