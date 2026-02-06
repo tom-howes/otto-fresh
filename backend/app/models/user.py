@@ -77,5 +77,5 @@ class UserUpdate(BaseModel):
   avatar_url: str | None = None
   github_access_token: UserAccessToken | None = None
   github_refresh_token: UserAccessToken | None = None
-  workspace_ids: list[WorkspaceId]
+  workspace_ids: list[WorkspaceId] | None = None
   installation_id: InstallationId | None = None
