@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
+<<<<<<< HEAD
 RAG CLI - Interactive interface with STREAMING support
+=======
+RAG CLI - Interactive interface with STREAMING support + GitHub Integration
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
 """
 import os
 import sys
@@ -15,7 +19,11 @@ load_dotenv()
 
 
 def print_streaming_response(response_dict, service_type):
+<<<<<<< HEAD
     """Handle streaming responses"""
+=======
+    """Handle streaming responses and capture output"""
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
     
     # Determine which stream key to use
     stream_key_map = {
@@ -29,7 +37,11 @@ def print_streaming_response(response_dict, service_type):
     
     if not stream_key or stream_key not in response_dict:
         # Not a streaming response
+<<<<<<< HEAD
         return False
+=======
+        return False, None
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
     
     print(f"\n{'='*60}")
     
@@ -44,7 +56,11 @@ def print_streaming_response(response_dict, service_type):
     
     print(f"{'='*60}\n")
     
+<<<<<<< HEAD
     # Stream the response
+=======
+    # Stream the response and CAPTURE it
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
     full_response = []
     try:
         for chunk in response_dict[stream_key]:
@@ -57,6 +73,12 @@ def print_streaming_response(response_dict, service_type):
     
     print("\n")
     
+<<<<<<< HEAD
+=======
+    # Combine all chunks into complete response
+    complete_response = ''.join(full_response)
+    
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
     # Print sources if available
     if 'sources' in response_dict and response_dict['sources']:
         print(f"\n{'='*60}")
@@ -65,16 +87,33 @@ def print_streaming_response(response_dict, service_type):
         for i, src in enumerate(response_dict['sources'], 1):
             print(f"{i}. {src['file']} (lines {src['lines']}) - {src['type']}")
     
+<<<<<<< HEAD
     return True
 
 
 def main():
     parser = argparse.ArgumentParser(description='RAG-based Code Assistant with Streaming')
+=======
+    return True, complete_response  # Return captured content
+
+
+def main():
+    parser = argparse.ArgumentParser(description='RAG-based Code Assistant with GitHub Integration')
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
     parser.add_argument('repo', help='Repository path (owner/repo)')
     parser.add_argument('--service', choices=['qa', 'doc', 'complete', 'edit'], 
                        default='qa', help='Service to use')
     parser.add_argument('--stream', action='store_true', help='Enable streaming output')
     
+<<<<<<< HEAD
+=======
+    # GitHub integration flags
+    parser.add_argument('--push', action='store_true', 
+                       help='Push changes/docs to GitHub (creates PR)')
+    parser.add_argument('--no-local', action='store_true',
+                       help='Skip saving files locally')
+    
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
     # Service-specific arguments
     parser.add_argument('--question', help='Question for Q&A service')
     parser.add_argument('--target', help='Target for documentation')
@@ -82,7 +121,11 @@ def main():
                        default='api', help='Documentation type')
     parser.add_argument('--code', help='Code context for completion')
     parser.add_argument('--instruction', help='Edit instruction')
+<<<<<<< HEAD
     parser.add_argument('--file', help='Target file for editing')
+=======
+    parser.add_argument('--file', help='Target file for editing/completion')
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
     parser.add_argument('--language', help='Programming language filter')
     
     parser.add_argument('--project-id', default=os.getenv('PROJECT_ID'))
@@ -94,10 +137,22 @@ def main():
         print("Error: PROJECT_ID and BUCKET_PROCESSED must be set")
         sys.exit(1)
     
+<<<<<<< HEAD
     # Initialize RAG services
     print("🚀 Initializing RAG services...")
     try:
         rag = RAGServices(args.project_id, args.bucket)
+=======
+    # Initialize RAG services with GitHub
+    print("🚀 Initializing RAG services...")
+    try:
+        rag = RAGServices(
+            args.project_id, 
+            args.bucket,
+            enable_github=True,
+            enable_local_save=not args.no_local
+        )
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
     except Exception as e:
         print(f"\n❌ Failed to initialize: {e}")
         sys.exit(1)
@@ -114,7 +169,13 @@ def main():
             )
             
             # Handle streaming or regular response
+<<<<<<< HEAD
             if not print_streaming_response(result, 'qa'):
+=======
+            was_streaming, captured_response = print_streaming_response(result, 'qa')
+            
+            if not was_streaming:
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
                 print(f"\n{'='*60}")
                 print("ANSWER:")
                 print(f"{'='*60}")
@@ -133,15 +194,75 @@ def main():
                 sys.exit(1)
             
             result = rag.generate_documentation(
+<<<<<<< HEAD
                 args.target, args.repo, args.doc_type, stream=args.stream
             )
             
             # Handle streaming or regular response
             if not print_streaming_response(result, 'doc'):
+=======
+                args.target, args.repo, args.doc_type, 
+                stream=args.stream,
+                push_to_github=args.push if not args.stream else False,  # Push after streaming
+                save_local=(not args.no_local) if not args.stream else False  # Save after streaming
+            )
+            
+            # Handle streaming or regular response
+            was_streaming, captured_response = print_streaming_response(result, 'doc')
+            
+            if was_streaming and captured_response:
+                # POST-PROCESSING: Save and push the captured streaming response
+                print(f"\n{'='*60}")
+                print("POST-PROCESSING STREAMING OUTPUT")
+                print(f"{'='*60}")
+                print(f"Captured: {len(captured_response)} characters")
+                
+                # Save locally
+                if not args.no_local:
+                    print("\n💾 Saving documentation locally...")
+                    try:
+                        local_path = rag.doc_manager.save_documentation(
+                            captured_response, args.target, args.doc_type, args.repo
+                        )
+                        print(f"✓ Saved to: {local_path}")
+                    except Exception as e:
+                        print(f"❌ Failed to save locally: {e}")
+                
+                # Push to GitHub
+                if args.push:
+                    print("\n📤 Pushing to GitHub...")
+                    try:
+                        github_result = rag.github_client.push_documentation(
+                            args.repo, captured_response, args.target, args.doc_type, create_pr=True
+                        )
+                        
+                        if github_result.get('success'):
+                            if github_result.get('pr_url'):
+                                print(f"✓ Pull request created: {github_result['pr_url']}")
+                            print(f"✓ Branch: {github_result.get('branch', 'N/A')}")
+                            print(f"✓ File: {github_result.get('file_path', 'N/A')}")
+                        else:
+                            print(f"❌ GitHub push failed: {github_result.get('error', 'Unknown error')}")
+                    except Exception as e:
+                        print(f"❌ Failed to push to GitHub: {e}")
+                
+            elif not was_streaming:
+                # Regular response (non-streaming)
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
                 print(f"\n{'='*60}")
                 print(f"{args.doc_type.upper()} DOCUMENTATION:")
                 print(f"{'='*60}")
                 print(result['documentation'])
+<<<<<<< HEAD
+=======
+                
+                if result.get('local_file'):
+                    print(f"\n📁 Saved locally: {result['local_file']}")
+                
+                if result.get('github', {}).get('pr_url'):
+                    print(f"\n🔗 GitHub PR: {result['github']['pr_url']}")
+                    print(f"🌿 Branch: {result['github'].get('branch', 'N/A')}")
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
         
         elif args.service == 'complete':
             if not args.code:
@@ -149,15 +270,82 @@ def main():
                 sys.exit(1)
             
             result = rag.complete_code(
+<<<<<<< HEAD
                 args.code, "", args.repo, args.language or 'python', stream=args.stream
             )
             
             # Handle streaming or regular response
             if not print_streaming_response(result, 'complete'):
+=======
+                args.code, "", args.repo, args.language or 'python',
+                stream=args.stream,
+                push_to_github=args.push if not args.stream else False,
+                save_local=(not args.no_local) if not args.stream else False,
+                target_file=args.file
+            )
+            
+            # Handle streaming or regular response
+            was_streaming, captured_response = print_streaming_response(result, 'complete')
+            
+            if was_streaming and captured_response:
+                # POST-PROCESSING
+                print(f"\n{'='*60}")
+                print("POST-PROCESSING STREAMING OUTPUT")
+                print(f"{'='*60}")
+                
+                # Extract code from response
+                code_content = rag._extract_code_from_response(captured_response)
+                
+                # Combine with original context
+                full_code = result.get('code_context', args.code) + "\n" + code_content
+                
+                # Save locally
+                if not args.no_local and args.file:
+                    print("\n💾 Saving completed code locally...")
+                    try:
+                        local_path = rag.doc_manager.save_edited_code(
+                            full_code, args.file, args.repo, "AI code completion"
+                        )
+                        print(f"✓ Saved to: {local_path}")
+                    except Exception as e:
+                        print(f"❌ Failed to save locally: {e}")
+                
+                # Push to GitHub
+                if args.push and args.file:
+                    print("\n📤 Pushing to GitHub...")
+                    try:
+                        github_result = rag.github_client.create_branch_and_push_code(
+                            args.repo, args.file, full_code, "AI code completion"
+                        )
+                        
+                        if github_result.get('success'):
+                            print(f"✓ Branch created: {github_result['branch']}")
+                            if github_result.get('pr_url'):
+                                print(f"✓ Pull request created: {github_result['pr_url']}")
+                        else:
+                            print(f"❌ GitHub push failed: {github_result.get('error', 'Unknown error')}")
+                    except Exception as e:
+                        print(f"❌ Failed to push to GitHub: {e}")
+                elif args.push and not args.file:
+                    print("\n⚠️  --file required for GitHub push")
+            
+            elif not was_streaming:
+                # Regular response
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
                 print(f"\n{'='*60}")
                 print("CODE COMPLETION:")
                 print(f"{'='*60}")
                 print(result['completion'])
+<<<<<<< HEAD
+=======
+                
+                if result.get('local_file'):
+                    print(f"\n📁 Saved locally: {result['local_file']}")
+                
+                if result.get('github', {}).get('pr_url'):
+                    print(f"\n🔗 GitHub PR: {result['github']['pr_url']}")
+                    print(f"🌿 Branch: {result['github']['branch']}")
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
         
         elif args.service == 'edit':
             if not args.instruction or not args.file:
@@ -165,15 +353,77 @@ def main():
                 sys.exit(1)
             
             result = rag.edit_code(
+<<<<<<< HEAD
                 args.instruction, args.file, args.repo, stream=args.stream
             )
             
             # Handle streaming or regular response
             if not print_streaming_response(result, 'edit'):
+=======
+                args.instruction, args.file, args.repo,
+                stream=args.stream,
+                push_to_github=args.push if not args.stream else False,
+                save_local=(not args.no_local) if not args.stream else False
+            )
+            
+            # Handle streaming or regular response
+            was_streaming, captured_response = print_streaming_response(result, 'edit')
+            
+            if was_streaming and captured_response:
+                # POST-PROCESSING
+                print(f"\n{'='*60}")
+                print("POST-PROCESSING STREAMING OUTPUT")
+                print(f"{'='*60}")
+                print(f"Captured: {len(captured_response)} characters")
+                
+                # Extract code from response
+                code_content = rag._extract_code_from_response(captured_response)
+                
+                # Save locally
+                if not args.no_local:
+                    print("\n💾 Saving edited code locally...")
+                    try:
+                        local_path = rag.doc_manager.save_edited_code(
+                            code_content, args.file, args.repo, args.instruction
+                        )
+                        print(f"✓ Saved to: {local_path}")
+                    except Exception as e:
+                        print(f"❌ Failed to save locally: {e}")
+                
+                # Push to GitHub
+                if args.push:
+                    print("\n📤 Pushing to GitHub...")
+                    try:
+                        github_result = rag.github_client.create_branch_and_push_code(
+                            args.repo, args.file, code_content, args.instruction
+                        )
+                        
+                        if github_result.get('success'):
+                            print(f"✓ Branch created: {github_result['branch']}")
+                            if github_result.get('pr_url'):
+                                print(f"✓ Pull request created: {github_result['pr_url']}")
+                        else:
+                            print(f"❌ GitHub push failed: {github_result.get('error', 'Unknown error')}")
+                    except Exception as e:
+                        print(f"❌ Failed to push to GitHub: {e}")
+                
+            elif not was_streaming:
+                # Regular response
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
                 print(f"\n{'='*60}")
                 print("EDITED CODE:")
                 print(f"{'='*60}")
                 print(result.get('modified_code', result.get('error', 'No changes')))
+<<<<<<< HEAD
+=======
+                
+                if result.get('local_file'):
+                    print(f"\n📁 Saved locally: {result['local_file']}")
+                
+                if result.get('github', {}).get('pr_url'):
+                    print(f"\n🔗 GitHub PR: {result['github']['pr_url']}")
+                    print(f"🌿 Branch: {result['github']['branch']}")
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
     
     except KeyboardInterrupt:
         print("\n\n⚠️  Interrupted by user")

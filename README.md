@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # OTTO
 
 AI-powered project management tool with repository-aware Q&A and automated task generation.
@@ -127,6 +128,8 @@ docker build -t otto-ml ./ml
 4. Run the setup script:
    - **Windows:** `setup-env.bat`
    - **Mac/Linux:** `chmod +x setup-env.sh && ./setup-env.sh`
+=======
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
 Otto - AI-Powered Code RAG System
 =================================
 

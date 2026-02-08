@@ -1,14 +1,25 @@
 """
 RAG Services: Q&A, Documentation, Code Completion, Code Editing
+<<<<<<< HEAD
 WITH STREAMING SUPPORT
+=======
+WITH STREAMING SUPPORT + GitHub Integration + Local Save
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
 """
 from typing import List, Dict, Optional, Iterator
 from .llm_client_gemini_api import GeminiClient
 from .vector_search import VectorSearch
+<<<<<<< HEAD
+=======
+from ..github.github_client import GitHubClient
+from ..utils.file_manager import DocumentationManager
+import re
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
 
 
 class RAGServices:
     """
+<<<<<<< HEAD
     Complete RAG system with 4 core services + streaming variants
     """
     
@@ -16,6 +27,40 @@ class RAGServices:
         self.llm = GeminiClient(project_id)
         self.search = VectorSearch(project_id, bucket_processed)
         self.project_id = project_id
+=======
+    Complete RAG system with 4 core services + streaming variants + GitHub integration
+    """
+    
+    def __init__(self, project_id: str, bucket_processed: str,
+                 enable_github: bool = True, enable_local_save: bool = True):
+        """
+        Initialize RAG services
+        
+        Args:
+            project_id: GCP project ID
+            bucket_processed: Bucket with processed chunks
+            enable_github: Enable GitHub integration
+            enable_local_save: Enable local file saving
+        """
+        self.llm = GeminiClient(project_id)
+        self.search = VectorSearch(project_id, bucket_processed)
+        self.project_id = project_id
+        
+        # GitHub integration
+        self.enable_github = enable_github
+        if enable_github:
+            try:
+                self.github_client = GitHubClient()
+            except ValueError as e:
+                print(f"⚠️  GitHub not available: {e}")
+                self.github_client = None
+                self.enable_github = False
+        
+        # Local file management
+        self.enable_local_save = enable_local_save
+        if enable_local_save:
+            self.doc_manager = DocumentationManager()
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
     
     # ==================== SERVICE 1: Q&A ====================
     
@@ -35,7 +80,11 @@ class RAGServices:
             Answer with sources (or iterator if streaming)
         """
         print(f"\n{'='*60}")
+<<<<<<< HEAD
         print(f"❓ Q&A SERVICE{'(Streaming)' if stream else ''}")
+=======
+        print(f"❓ Q&A SERVICE {('(Streaming)' if stream else '')}")
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
         print(f"{'='*60}")
         print(f"Question: {question}")
         
@@ -95,7 +144,13 @@ Instructions:
     
     def generate_documentation(self, target: str, repo_path: str,
                               doc_type: str = 'api',
+<<<<<<< HEAD
                               stream: bool = False) -> Dict:
+=======
+                              stream: bool = False,
+                              push_to_github: bool = False,
+                              save_local: bool = True) -> Dict:
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
         """
         Generate professional documentation
         
@@ -104,12 +159,23 @@ Instructions:
             repo_path: Repository path
             doc_type: Type of docs (api, user_guide, technical, readme)
             stream: Enable streaming response
+<<<<<<< HEAD
             
         Returns:
             Generated documentation (or iterator if streaming)
         """
         print(f"\n{'='*60}")
         print(f"📝 DOCUMENTATION SERVICE {'(Streaming)' if stream else ''}")
+=======
+            push_to_github: Push to GitHub repo
+            save_local: Save locally as .md file
+            
+        Returns:
+            Generated documentation with file paths
+        """
+        print(f"\n{'='*60}")
+        print(f"📝 DOCUMENTATION SERVICE {('(Streaming)' if stream else '')}")
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
         print(f"{'='*60}")
         print(f"Target: {target}")
         print(f"Type: {doc_type}")
@@ -189,14 +255,24 @@ IMPORTANT:
 - Generate the FULL documentation"""
         
         if stream:
+<<<<<<< HEAD
             # Return streaming response
+=======
+            # Return streaming response (will be saved in CLI after capture)
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
             return {
                 'documentation_stream': self.llm.generate_with_context_stream(
                     full_query, chunks, system_prompt, temperature=0.3, max_tokens=8192
                 ),
                 'type': doc_type,
                 'files_referenced': len(set(c['file_path'] for c in chunks)),
+<<<<<<< HEAD
                 'streaming': True
+=======
+                'streaming': True,
+                'repo_path': repo_path,
+                'target': target
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
             }
         else:
             # Regular generation
@@ -206,17 +282,51 @@ IMPORTANT:
             
             print(f"✓ Documentation generated ({len(docs)} chars)")
             
+<<<<<<< HEAD
             return {
+=======
+            result = {
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
                 'documentation': docs,
                 'type': doc_type,
                 'files_referenced': len(set(c['file_path'] for c in chunks))
             }
+<<<<<<< HEAD
+=======
+            
+            # Save locally
+            if save_local and self.enable_local_save:
+                local_path = self.doc_manager.save_documentation(
+                    docs, target, doc_type, repo_path
+                )
+                result['local_file'] = local_path
+            
+            # Push to GitHub
+            if push_to_github and self.enable_github and self.github_client:
+                print("\n📤 Pushing to GitHub...")
+                github_result = self.github_client.push_documentation(
+                    repo_path, docs, target, doc_type, create_pr=True
+                )
+                result['github'] = github_result
+                
+                if github_result.get('success'):
+                    print(f"✓ GitHub PR created: {github_result.get('pr_url')}")
+            
+            return result
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
     
     # ==================== SERVICE 3: CODE COMPLETION ====================
     
     def complete_code(self, code_context: str, cursor_position: str,
                      repo_path: str, language: str = 'python',
+<<<<<<< HEAD
                      stream: bool = False) -> Dict:
+=======
+                     stream: bool = False,
+                     push_to_github: bool = False,
+                     save_local: bool = True,
+                     target_file: Optional[str] = None) -> Dict:
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
         """
         Intelligent code completion
         
@@ -226,12 +336,24 @@ IMPORTANT:
             repo_path: Repository path
             language: Programming language
             stream: Enable streaming
+<<<<<<< HEAD
             
         Returns:
             Code suggestions
         """
         print(f"\n{'='*60}")
         print(f"💻 CODE COMPLETION SERVICE {'(Streaming)' if stream else ''}")
+=======
+            push_to_github: Push completed code to GitHub
+            save_local: Save completed code locally
+            target_file: File being edited (for GitHub push)
+            
+        Returns:
+            Code suggestions with optional save/push
+        """
+        print(f"\n{'='*60}")
+        print(f"💻 CODE COMPLETION SERVICE {('(Streaming)' if stream else '')}")
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
         print(f"{'='*60}")
         
         # Search for similar code patterns
@@ -259,7 +381,14 @@ Instructions:
                     completion_query, chunks, system_prompt, temperature=0.3, max_tokens=2048
                 ),
                 'language': language,
+<<<<<<< HEAD
                 'streaming': True
+=======
+                'streaming': True,
+                'repo_path': repo_path,
+                'target_file': target_file,
+                'code_context': code_context
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
             }
         else:
             completion = self.llm.generate_with_context(
@@ -268,16 +397,57 @@ Instructions:
             
             print(f"✓ Completion generated")
             
+<<<<<<< HEAD
             return {
+=======
+            # Extract code from response
+            code_content = self._extract_code_from_response(completion)
+            
+            # Combine with original context
+            full_code = code_context + "\n" + code_content
+            
+            result = {
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
                 'completion': completion,
                 'language': language,
                 'confidence': 'high' if len(chunks) >= 3 else 'medium'
             }
+<<<<<<< HEAD
+=======
+            
+            # Save locally if target file is specified
+            if save_local and self.enable_local_save and target_file:
+                local_path = self.doc_manager.save_edited_code(
+                    full_code, target_file, repo_path, "code completion"
+                )
+                result['local_file'] = local_path
+            
+            # Push to GitHub if target file is specified
+            if push_to_github and self.enable_github and self.github_client and target_file:
+                print("\n📤 Pushing to GitHub...")
+                github_result = self.github_client.create_branch_and_push_code(
+                    repo_path, target_file, full_code, "AI code completion"
+                )
+                result['github'] = github_result
+                
+                if github_result.get('success'):
+                    print(f"✓ Branch created: {github_result['branch']}")
+                    if github_result.get('pr_url'):
+                        print(f"✓ Pull request: {github_result['pr_url']}")
+            
+            return result
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
     
     # ==================== SERVICE 4: CODE EDITING ====================
     
     def edit_code(self, instruction: str, target_file: str, 
+<<<<<<< HEAD
                   repo_path: str, stream: bool = False) -> Dict:
+=======
+                  repo_path: str, stream: bool = False,
+                  push_to_github: bool = False,
+                  save_local: bool = True) -> Dict:
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
         """
         Edit existing code based on instructions
         
@@ -286,12 +456,23 @@ Instructions:
             target_file: File to edit
             repo_path: Repository path
             stream: Enable streaming
+<<<<<<< HEAD
             
         Returns:
             Modified code with explanation
         """
         print(f"\n{'='*60}")
         print(f"✏️  CODE EDITING SERVICE {'(Streaming)' if stream else ''}")
+=======
+            push_to_github: Push changes to GitHub
+            save_local: Save edited code locally
+            
+        Returns:
+            Modified code with optional save/push
+        """
+        print(f"\n{'='*60}")
+        print(f"✏️  CODE EDITING SERVICE {('(Streaming)' if stream else '')}")
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
         print(f"{'='*60}")
         print(f"Instruction: {instruction}")
         print(f"Target: {target_file}")
@@ -345,7 +526,12 @@ Brief description of what was changed and why
                 ),
                 'file': target_file,
                 'instruction': instruction,
+<<<<<<< HEAD
                 'streaming': True
+=======
+                'streaming': True,
+                'repo_path': repo_path
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
             }
         else:
             response = self.llm.generate_with_context(
@@ -354,9 +540,58 @@ Brief description of what was changed and why
             
             print(f"✓ Code edited")
             
+<<<<<<< HEAD
             return {
+=======
+            # Extract code from response
+            code_content = self._extract_code_from_response(response)
+            
+            result = {
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
                 'modified_code': response,
                 'file': target_file,
                 'instruction': instruction,
                 'chunks_analyzed': len(all_chunks)
+<<<<<<< HEAD
             }
+=======
+            }
+            
+            # Save locally
+            if save_local and self.enable_local_save:
+                local_path = self.doc_manager.save_edited_code(
+                    code_content, target_file, repo_path, instruction
+                )
+                result['local_file'] = local_path
+            
+            # Push to GitHub
+            if push_to_github and self.enable_github and self.github_client:
+                print("\n📤 Pushing to GitHub...")
+                github_result = self.github_client.create_branch_and_push_code(
+                    repo_path, target_file, code_content, instruction
+                )
+                result['github'] = github_result
+                
+                if github_result.get('success'):
+                    print(f"✓ Branch created: {github_result['branch']}")
+                    if github_result.get('pr_url'):
+                        print(f"✓ Pull request: {github_result['pr_url']}")
+            
+            return result
+    
+    # ==================== HELPER METHODS ====================
+    
+    def _extract_code_from_response(self, response: str) -> str:
+        """Extract code content from markdown response"""
+        # Remove markdown code blocks
+        # Pattern for ```language ... ```
+        pattern = r'```(?:\w+)?\n(.*?)```'
+        matches = re.findall(pattern, response, re.DOTALL)
+        
+        if matches:
+            # Return the first code block
+            return matches[0].strip()
+        else:
+            # No code blocks found, return as is
+            return response.strip()
+>>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
