@@ -43,7 +43,13 @@ class WorkspaceCreate(BaseModel):
   Attributes:
       repo_full_name: Full repository name (owner/repo) to connect.
   """
+  name: str
+  repo_owner: str
+  repo_name: str
   repo_full_name: str
+  repo_default_branch: str
+  installation_id: InstallationId
+  created_by: UserId
 
 class WorkspaceUpdate(BaseModel):
   """Data for updating an existing workspace. All fields are optional.
