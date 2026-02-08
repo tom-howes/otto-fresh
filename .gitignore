@@ -1,11 +1,8 @@
-<<<<<<< HEAD
 .env 
 .env.local 
 .env*.local 
 backend/.env 
 frontend/.env.local 
-=======
->>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
 credentials.json
 *.json
 .env
