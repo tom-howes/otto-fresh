@@ -1,0 +1,12 @@
+# requirements.txt
+
+google-cloud-storage
+google-cloud-aiplatform
+apache-beam[gcp]==2.60.0  # Updated version
+tree-sitter==0.20.4
+tree-sitter-languages==1.10.2
+requests==2.31.0
+python-dotenv==1.0.0
+PyGithub==2.1.1
+vertexai
+functions-framework==3.5.0
