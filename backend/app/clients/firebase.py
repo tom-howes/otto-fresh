@@ -1,4 +1,3 @@
-#firebase.py
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.oauth2 import service_account
