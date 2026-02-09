@@ -1,0 +1,11 @@
+# Environment Variables
+.env
+
+# Firebase Credentials
+firebase-credentials.json
+
+# Github Private Key
+otto-private-key.pem
+
+# Pycache
+*.pyc
