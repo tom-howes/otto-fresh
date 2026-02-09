@@ -64,7 +64,7 @@ class GitHubIngester:
         print(f"📁 Found {len(code_files)} code files to process")
         
         # Process and upload files
-        files_metadata = self._process_files(owner, repo, code_files, repo_path)
+        files_metadata = self._process_files(owner, repo, code_files, repo_path, target_branch)
         
         # Create and save metadata
         metadata = {
@@ -147,40 +147,95 @@ class GitHubIngester:
         
         return filtered
     
-    def _process_files(self, owner: str, repo: str, files: List[Dict], repo_path: str) -> List[Dict]:
-        """Process and upload files to Cloud Storage"""
+    def _process_files(self, owner: str, repo: str, files: List[Dict], 
+                      repo_path: str, branch: str) -> List[Dict]:  # Add branch parameter
+        """Process and upload files using PyGithub"""
+        from github import Github
+
+        # Initialize PyGithub
+        print(f"Initializing GitHub client...")
+        github_client = Github(self.github_token) if self.github_token else Github()
+
+        try:
+            gh_repo = github_client.get_repo(f"{owner}/{repo}")
+            print(f"✓ Connected to repo, using branch: {branch}")  # Show correct branch
+        except Exception as e:
+            print(f"❌ Failed to connect to repo: {e}")
+            raise
+        
         bucket = self.storage_client.bucket(self.bucket_name)
         files_metadata = []
-        
+        skipped = 0
+
+        print(f"\nProcessing {len(files)} files from branch '{branch}'...")
+
         for idx, item in enumerate(files, 1):
             try:
-                # Get file content
-                content = self._get_file_content(owner, repo, item['path'])
+                file_path = item['path']
+
+                # Get file content from the SPECIFIED BRANCH (not default!)
+                try:
+                    file_content = gh_repo.get_contents(file_path, ref=branch)  # Use the branch parameter!
+                except Exception as e:
+                    print(f"⚠️  Could not fetch {file_path}: {str(e)[:60]}")
+                    skipped += 1
+                    continue
                 
-                if content is None:
-                    print(f"⚠️  Skipping binary file: {item['path']}")
+                # Check if it's a file (not a directory)
+                if file_content.type != 'file':
+                    continue
+                
+                # Decode content
+                try:
+                    content = file_content.decoded_content.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        content = file_content.decoded_content.decode('utf-8', errors='ignore')
+                    except Exception as e:
+                        print(f"⚠️  Decode error {file_path}: {e}")
+                        skipped += 1
+                        continue
+                    
+                # Sanity checks
+                if not content or len(content.strip()) == 0:
+                    skipped += 1
+                    continue
+                
+                # Check if it's actually binary
+                if '\x00' in content:
+                    print(f"⚠️  Binary file: {file_path}")
+                    skipped += 1
                     continue
                 
                 # Upload to Cloud Storage
-                blob_path = f"{repo_path}/{item['path']}"
+                blob_path = f"{repo_path}/{file_path}"
                 blob = bucket.blob(blob_path)
                 blob.upload_from_string(content)
-                
+
                 files_metadata.append({
-                    'path': item['path'],
-                    'size': item['size'],
+                    'path': file_path,
+                    'size': len(content),
                     'blob_path': blob_path,
-                    'language': self._detect_language(item['path']),
-                    'sha': item.get('sha', '')
+                    'language': self._detect_language(file_path),
+                    'sha': file_content.sha
                 })
-                
-                if idx % 20 == 0:
-                    print(f"✓ Processed {idx}/{len(files)} files")
-                    
+
+                # Progress updates
+                if idx % 10 == 0 or idx == len(files):
+                    print(f"✓ Processed {idx}/{len(files)} files ({len(files_metadata)} successful, {skipped} skipped)")
+
             except Exception as e:
-                print(f"⚠️  Error processing {item['path']}: {e}")
+                print(f"⚠️  Error processing {item['path']}: {str(e)[:100]}")
+                skipped += 1
                 continue
-        
+            
+        print(f"\n{'='*60}")
+        print(f"✅ Ingestion Summary:")
+        print(f"  Total files found: {len(files)}")
+        print(f"  Successfully processed: {len(files_metadata)}")
+        print(f"  Skipped: {skipped}")
+        print(f"{'='*60}")
+
         return files_metadata
     
     def _get_file_content(self, owner: str, repo: str, path: str) -> Optional[str]:

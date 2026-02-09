@@ -6,6 +6,7 @@ import os
 import sys
 import argparse
 from dotenv import load_dotenv
+import config
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -20,9 +21,9 @@ def main():
     parser.add_argument('--chunk-size', type=int, default=150, help='Lines per chunk (default: 150)')
     parser.add_argument('--overlap', type=int, default=10, help='Overlap lines (default: 10)')
     parser.add_argument('--basic', action='store_true', help='Use basic chunker (faster, less context)')
-    parser.add_argument('--project-id', default=os.getenv('PROJECT_ID'))
-    parser.add_argument('--bucket-raw', default=os.getenv('BUCKET_RAW'))
-    parser.add_argument('--bucket-processed', default=os.getenv('BUCKET_PROCESSED'))
+    parser.add_argument('--project-id', default=config.getenv('PROJECT_ID'))
+    parser.add_argument('--bucket-raw', default=config.getenv('BUCKET_RAW'))
+    parser.add_argument('--bucket-processed', default=config.getenv('BUCKET_PROCESSED'))
     
     args = parser.parse_args()
     

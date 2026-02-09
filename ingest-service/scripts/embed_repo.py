@@ -6,6 +6,7 @@ import os
 import sys
 import argparse
 from dotenv import load_dotenv
+import config
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -19,9 +20,9 @@ def main():
     parser.add_argument('repo', help='Repository path (owner/repo)')
     parser.add_argument('--force', action='store_true', help='Re-embed existing embeddings')
     parser.add_argument('--batch-size', type=int, default=25, help='Batch size (default: 25)')
-    parser.add_argument('--project-id', default=os.getenv('PROJECT_ID'))
-    parser.add_argument('--bucket', default=os.getenv('BUCKET_PROCESSED'))
-    parser.add_argument('--location', default='us-central1', help='GCP region')
+    parser.add_argument('--project-id', default=config.getenv('PROJECT_ID'))
+    parser.add_argument('--bucket', default=config.getenv('BUCKET_PROCESSED'))
+    parser.add_argument('--location', default=config.LOCATION)
     
     args = parser.parse_args()
     
