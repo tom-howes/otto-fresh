@@ -49,48 +49,60 @@ async def github_callback(
     installation_id: InstallationId | None = None,
     setup_action: str | None = None
 ) -> RedirectResponse:
-  """Handle GitHub OAuth callback after user authorization.
+  """Handle GitHub OAuth callback after user authorization."""
   
-  Validates the state parameter, exchanges the authorization code for
-  access tokens, fetches the user profile, creates or updates the user
-  in Firestore, and establishes a session.
-  
-  Args:
-      code: Authorization code from GitHub to exchange for tokens.
-      state: CSRF state parameter to validate against stored cookie.
-      request: The incoming request containing the state cookie.
-      
-  Returns:
-      Redirect response to the dashboard with session cookie set.
-      
-  Raises:
-      HTTPException: 400 if authorization failed or state is invalid.
-      HTTPException: 500 if user data update fails.
-      HTTPException: 502 if GitHub API communication fails.
-  """
+  print(f"\n{'='*60}")
+  print(f"📥 GitHub Callback Received")
+  print(f"{'='*60}")
+  print(f"Code: {code[:20]}...")
+  print(f"State: {state}")
+  print(f"Installation ID: {installation_id}")
+  print(f"{'='*60}\n")
 
   if not code:
+    print("❌ No authorization code")
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Authorization failed")
   
   if not installation_id:
     stored_state: OAuthState = request.cookies.get("oauth_state")
+    print(f"Stored state: {stored_state}")
+    print(f"Received state: {state}")
+    
     if not state or not stored_state or stored_state != state:
+      print("❌ State validation failed")
       raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state")
   
   try:
+    print("📝 Step 1: Exchanging code for access token...")
     token_object = await get_user_access_token(code)
+    print(f"✓ Got tokens")
+    
     user_access_token = token_object["access_token"]
+    print(f"   Access token: {user_access_token[:20]}...")
+    
+    print("\n📝 Step 2: Fetching user profile...")
     user_profile = await get_user_profile(user_access_token)
+    print(f"✓ Got profile for: {user_profile.get('login')}")
+    print(f"   User ID: {user_profile.get('id')}")
+    
   except GitHubAPIError as e:
+    print(f"\n❌ GitHub API Error: {e.message}")
+    print(f"   Status Code: {e.status_code}")
     raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=e.message)
   except Exception as e:
-    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="GitHub connection failed")
+    print(f"\n❌ Unexpected Error: {type(e).__name__}")
+    print(f"   Message: {str(e)}")
+    import traceback
+    traceback.print_exc()
+    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"GitHub connection failed: {str(e)}")
   
   try:
+    print("\n📝 Step 3: Creating/updating user in Firestore...")
     user_id = str(user_profile["id"])
     existing_user = await get_user_by_id(user_id)
 
     if existing_user:
+      print(f"✓ User exists, updating...")
       update_data = UserUpdate(
         github_access_token=token_object["access_token"],
         github_refresh_token=token_object["refresh_token"],
@@ -99,6 +111,7 @@ async def github_callback(
       await update_user(user_id, update_data)
       has_installation = installation_id or existing_user.get("installation_id")
     else:
+      print(f"✓ Creating new user...")
       new_user = UserCreate(
         id=user_id,
         github_username=user_profile["login"],
@@ -110,24 +123,35 @@ async def github_callback(
       )
       await create_user(new_user)
       has_installation = installation_id is not None
+    
+    print("✓ User data saved")
+    
   except Exception as e:
-    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="User data update failed")
+    print(f"\n❌ Firestore Error: {str(e)}")
+    import traceback
+    traceback.print_exc()
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"User data update failed: {str(e)}")
   
+  print("\n📝 Step 4: Generating session token...")
   session_token: JWT = generate_session_token(user_id)
+  print(f"✓ Session token generated")
 
   if has_installation:
     redirect_url = "http://localhost:3000/dashboard"
   else:
     redirect_url = "http://localhost:8000/github/install"
   
+  print(f"\n📝 Step 5: Redirecting to: {redirect_url}")
+  print(f"{'='*60}\n")
+  
   response = RedirectResponse(redirect_url)
   response.delete_cookie("oauth_state")
   response.set_cookie(
     key="session_token",
     value=session_token,
-    max_age=60 * 60 * 24 * 7, # 7 days
+    max_age=60 * 60 * 24 * 7,
     httponly=True,
-    secure=False, # Set to true in prod
+    secure=False,
     samesite="lax" 
   )
   return response

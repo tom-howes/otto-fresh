@@ -32,13 +32,7 @@ class RAGServices:
         
         # GitHub integration
         self.enable_github = enable_github
-        if enable_github:
-            try:
-                self.github_client = GitHubClient()
-            except ValueError as e:
-                print(f"⚠️  GitHub not available: {e}")
-                self.github_client = None
-                self.enable_github = False
+        self.github_client = None
         
         # Local file management
         self.enable_local_save = enable_local_save
