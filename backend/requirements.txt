@@ -1,0 +1,25 @@
+# Existing backend dependencies
+fastapi
+firebase-admin
+google-auth
+httpx
+pyjwt
+python-dotenv
+
+# RAG dependencies
+google-cloud-storage
+google-cloud-aiplatform
+google-generativeai
+PyGithub
+sentence-transformers
+torch
+tree-sitter
+tree-sitter-languages
+
+pydantic
+uvicorn
+httpx
+firebase-admin
+python-dotenv
+PyJWT[crypto]
+google-auth
