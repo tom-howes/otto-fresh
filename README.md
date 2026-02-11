@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # OTTO
 
 AI-powered project management tool with repository-aware Q&A and automated task generation.
