@@ -1,698 +1,657 @@
 """
-RAG Routes - AI-powered code intelligence for Otto
-Uses logged-in user's GitHub token for all operations
-Supports: Private repos, User attribution, GitHub push, Local save, Streaming
+RAG Routes - Complete multi-user RAG system
+Backend handles: auth, access control, user tracking, preferences
+Ingest service handles: pipeline, RAG, search (via HTTP)
 """
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from app.dependencies.auth import get_current_user
+from app.clients.ingest_service import IngestServiceClient
 from app.models import User
 from pydantic import BaseModel
 from typing import Optional, List, Dict
+from github import Github, GithubException
 import os
-import sys
 import json
 
-# Add ingest-service to path
-INGEST_SERVICE_PATH = os.path.join(os.path.dirname(__file__), '../../../ingest-service')
-sys.path.insert(0, INGEST_SERVICE_PATH)
-
-from src.rag.rag_services import RAGServices
-from src.ingestion.github_ingester import GitHubIngester
-from src.chunking.enhanced_chunker import EnhancedCodeChunker
-from src.chunking.embedder import ChunkEmbedder
-from src.github.github_client import GitHubClient
+from google.cloud import storage as gcs
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
-# Configuration (shared settings only, no user tokens!)
-PROJECT_ID = os.getenv("GCP_PROJECT_ID", "otto-486221")
+# HTTP client for ingest service
+ingest_client = IngestServiceClient()
+
+# GCP config (backend still needs these for user metadata)
+PROJECT_ID = os.getenv("GCP_PROJECT_ID", "otto-pm")
 BUCKET_RAW = os.getenv("GCS_BUCKET_RAW", "otto-raw-repos")
 BUCKET_PROCESSED = os.getenv("GCS_BUCKET_PROCESSED", "otto-processed-chunks")
 
+# User access tracking (backend owns this - tied to auth)
+from google.cloud import storage
+_storage_client = storage.Client(project=PROJECT_ID)
+_processed_bucket = _storage_client.bucket(BUCKET_PROCESSED)
 
-# ==================== HELPER FUNCTIONS ====================
+
+# ==================== USER METADATA HELPERS ====================
+
+def _get_shared_repo_path(repo_full_name: str) -> str:
+    return f"repos/{repo_full_name}"
+
+def _get_user_metadata_path(user_id: str, repo_full_name: str) -> str:
+    return f"user_data/{user_id}/repos/{repo_full_name}"
+
+def _record_user_access(user_id: str, repo_full_name: str, 
+                        access_level: str, permissions: Dict):
+    """Record user accessed a repo (stored in GCS)"""
+    from datetime import datetime
+    
+    metadata_path = _get_user_metadata_path(user_id, repo_full_name)
+    blob = _processed_bucket.blob(f"{metadata_path}/access_info.json")
+    
+    access_info = {
+        'user_id': user_id,
+        'repo': repo_full_name,
+        'access_level': access_level,
+        'github_permissions': permissions,
+        'first_accessed': datetime.now().isoformat(),
+        'last_accessed': datetime.now().isoformat(),
+        'access_count': 1
+    }
+    
+    if blob.exists():
+        try:
+            existing = json.loads(blob.download_as_text())
+            access_info['first_accessed'] = existing.get('first_accessed', access_info['first_accessed'])
+            access_info['access_count'] = existing.get('access_count', 0) + 1
+        except Exception:
+            pass
+    
+    blob.upload_from_string(json.dumps(access_info, indent=2))
+
+def _get_access_info(user_id: str, repo_full_name: str) -> Optional[Dict]:
+    """Get user's access info for a repo"""
+    metadata_path = _get_user_metadata_path(user_id, repo_full_name)
+    blob = _processed_bucket.blob(f"{metadata_path}/access_info.json")
+    if blob.exists():
+        return json.loads(blob.download_as_text())
+    return None
+
+def _get_user_repos(user_id: str) -> List[str]:
+    """Get all repos a user has accessed"""
+    prefix = f"user_data/{user_id}/repos/"
+    all_blobs = list(_processed_bucket.list_blobs(prefix=prefix))
+    repos = set()
+    for blob in all_blobs:
+        parts = blob.name.split('/')
+        if len(parts) >= 6 and parts[5] == 'access_info.json':
+            repos.add(f"{parts[3]}/{parts[4]}")
+    return sorted(list(repos))
+
+def _save_user_preferences(user_id: str, repo_full_name: str, preferences: Dict):
+    """Save user preferences for a repo"""
+    from datetime import datetime
+    metadata_path = _get_user_metadata_path(user_id, repo_full_name)
+    blob = _processed_bucket.blob(f"{metadata_path}/preferences.json")
+    pref_data = {
+        'preferred_doc_type': preferences.get('doc_type', 'api'),
+        'preferred_chunk_size': preferences.get('chunk_size', 150),
+        'auto_push_prs': preferences.get('auto_push', False),
+        'favorite': preferences.get('favorite', False),
+        'notifications': preferences.get('notifications', True),
+        'updated_at': datetime.now().isoformat()
+    }
+    blob.upload_from_string(json.dumps(pref_data, indent=2))
+
+def _get_user_preferences(user_id: str, repo_full_name: str) -> Dict:
+    """Get user preferences for a repo"""
+    metadata_path = _get_user_metadata_path(user_id, repo_full_name)
+    blob = _processed_bucket.blob(f"{metadata_path}/preferences.json")
+    if blob.exists():
+        return json.loads(blob.download_as_text())
+    return {
+        'preferred_doc_type': 'api',
+        'preferred_chunk_size': 150,
+        'auto_push_prs': False,
+        'favorite': False,
+        'notifications': True
+    }
+
+def _get_commit_info(repo_full_name: str) -> Optional[Dict]:
+    """Get last commit info from GCS"""
+    repo_path = _get_shared_repo_path(repo_full_name)
+    blob = _processed_bucket.blob(f"{repo_path}/commit_info.json")
+    if blob.exists():
+        try:
+            return json.loads(blob.download_as_text())
+        except Exception:
+            return None
+    return None
+
+def _get_commit_history(repo_full_name: str, limit: int = 10) -> List[Dict]:
+    """Get commit processing history"""
+    repo_path = _get_shared_repo_path(repo_full_name)
+    blob = _processed_bucket.blob(f"{repo_path}/commit_history.jsonl")
+    if not blob.exists():
+        return []
+    try:
+        content = blob.download_as_text()
+        lines = content.strip().split('\n')
+        history = [json.loads(line) for line in lines if line.strip()]
+        history.reverse()
+        return history[:limit]
+    except Exception:
+        return []
+
+
+# ==================== AUTH HELPERS ====================
 
 def get_user_github_token(user: User) -> str:
-    """
-    Extract GitHub token from authenticated user
-    
-    Args:
-        user: Authenticated user from session
-        
-    Returns:
-        User's GitHub access token
-        
-    Raises:
-        HTTPException: If token not found or expired
-    """
     github_token = user.get("github_access_token")
-    
     if not github_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="GitHub access token not found. Please re-authenticate."
         )
-    
     return github_token
 
-
-def get_rag_service(user: User) -> RAGServices:
-    """
-    Initialize RAG service with user's GitHub token
-    
-    This ensures:
-    - User can only access repos they have permission for
-    - PRs are created under user's account
-    - Private repos are accessible
-    
-    Args:
-        user: Authenticated user
-        
-    Returns:
-        RAGServices instance configured for this user
-    """
+def verify_user_repo_access(user: User, repo_full_name: str) -> Dict:
     try:
         github_token = get_user_github_token(user)
-        
-        rag = RAGServices(
-            PROJECT_ID, 
-            BUCKET_PROCESSED,
-            enable_github=True,
-            enable_local_save=True
-        )
-        
-        # Override GitHub client to use USER'S token
-        rag.github_client = GitHubClient(github_token)
-        
-        print(f"✓ RAG initialized for user: {user.get('github_username', 'unknown')}")
-        
-        return rag
-        
-    except HTTPException:
-        raise
-    except Exception as e:
+        gh = Github(github_token)
+        gh_repo = gh.get_repo(repo_full_name)
+        return {
+            'repo': gh_repo,
+            'permissions': {
+                'admin': gh_repo.permissions.admin,
+                'push': gh_repo.permissions.push,
+                'pull': gh_repo.permissions.pull
+            }
+        }
+    except GithubException as e:
+        if e.status == 404:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Repository not found or you don't have access"
+            )
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Failed to initialize RAG service: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to verify access: {str(e)}"
         )
-
-
-def get_user_ingester(user: User) -> GitHubIngester:
-    """
-    Create ingester with user's GitHub token
-    
-    Args:
-        user: Authenticated user
-        
-    Returns:
-        GitHubIngester configured for this user
-    """
-    github_token = get_user_github_token(user)
-    return GitHubIngester(PROJECT_ID, BUCKET_RAW, github_token)
 
 
 # ==================== REQUEST/RESPONSE MODELS ====================
 
 class IngestRepoRequest(BaseModel):
-    """Request to ingest a repository"""
     repo_full_name: str
     branch: Optional[str] = None
 
-
 class IngestRepoResponse(BaseModel):
-    """Response after ingesting repository"""
     success: bool
     repo: str
     total_files: int
     message: str
     user: str
-
+    was_cached: bool
+    commit_sha: Optional[str] = None
 
 class ProcessRepoRequest(BaseModel):
-    """Request to process (chunk) a repository"""
     repo_full_name: str
     chunk_size: int = 150
     overlap: int = 10
 
-
 class ProcessRepoResponse(BaseModel):
-    """Response after processing repository"""
     success: bool
     repo: str
     total_chunks: int
     message: str
 
-
 class EmbedRepoRequest(BaseModel):
-    """Request to generate embeddings"""
     repo_full_name: str
     force_reembed: bool = False
 
-
 class EmbedRepoResponse(BaseModel):
-    """Response after embedding generation"""
     success: bool
     repo: str
     total_embedded: int
     message: str
 
+class FullPipelineRequest(BaseModel):
+    repo_full_name: str
+    branch: Optional[str] = None
+    chunk_size: int = 150
+    overlap: int = 10
+    force_reembed: bool = False
+
+class FullPipelineResponse(BaseModel):
+    success: bool
+    repo: str
+    total_files: int
+    total_chunks: int
+    total_embedded: int
+    commit_sha: Optional[str] = None
+    was_cached: bool
+    message: str
+    user: str
 
 class AskQuestionRequest(BaseModel):
-    """Request to ask a question"""
     repo_full_name: str
     question: str
     language: Optional[str] = None
 
-
 class AskQuestionResponse(BaseModel):
-    """Response with answer"""
     answer: str
     sources: List[Dict]
     chunks_used: int
 
-
 class GenerateDocsRequest(BaseModel):
-    """Request to generate documentation"""
     repo_full_name: str
     target: str
     doc_type: str = "api"
     push_to_github: bool = False
-    save_local: bool = True
-
 
 class GenerateDocsResponse(BaseModel):
-    """Response with generated documentation"""
     documentation: str
     type: str
     files_referenced: int
-    local_file: Optional[str] = None
     github_pr: Optional[str] = None
     github_branch: Optional[str] = None
     pushed_by: Optional[str] = None
 
-
 class CompleteCodeRequest(BaseModel):
-    """Request for code completion"""
     repo_full_name: str
     code_context: str
     language: str = "python"
     target_file: Optional[str] = None
     push_to_github: bool = False
-    save_local: bool = False
-
 
 class CompleteCodeResponse(BaseModel):
-    """Response with code completion"""
     completion: str
     language: str
     confidence: str
-    local_file: Optional[str] = None
     github_pr: Optional[str] = None
     pushed_by: Optional[str] = None
 
-
 class EditCodeRequest(BaseModel):
-    """Request to edit code"""
     repo_full_name: str
     instruction: str
     target_file: str
     push_to_github: bool = False
-    save_local: bool = True
-
 
 class EditCodeResponse(BaseModel):
-    """Response with edited code"""
     modified_code: str
     file: str
     instruction: str
     chunks_analyzed: int
-    local_file: Optional[str] = None
     github_pr: Optional[str] = None
     github_branch: Optional[str] = None
     pushed_by: Optional[str] = None
 
-
 class SearchCodeRequest(BaseModel):
-    """Request to search code"""
     repo_full_name: str
     query: str
     language: Optional[str] = None
     top_k: int = 10
 
-
 class SearchCodeResponse(BaseModel):
-    """Response with search results"""
     results: List[Dict]
     total_found: int
+
+class UserPreferencesRequest(BaseModel):
+    repo_full_name: str
+    preferred_doc_type: Optional[str] = None
+    preferred_chunk_size: Optional[int] = None
+    auto_push_prs: Optional[bool] = None
+    favorite: Optional[bool] = None
+    notifications: Optional[bool] = None
 
 
 # ==================== PIPELINE ENDPOINTS ====================
 
+@router.post("/repos/pipeline", response_model=FullPipelineResponse)
+async def run_full_pipeline(
+    request: FullPipelineRequest,
+    current_user: User = Depends(get_current_user)
+) -> FullPipelineResponse:
+    """Run full pipeline: ingest → chunk → embed via ingest-service."""
+    github_token = get_user_github_token(current_user)
+    repo_access = verify_user_repo_access(current_user, request.repo_full_name)
+    user_id = current_user.get('id')
+
+    _record_user_access(
+        user_id, request.repo_full_name,
+        'write' if repo_access['permissions']['push'] else 'read',
+        repo_access['permissions']
+    )
+
+    result = await ingest_client.run_full_pipeline(
+        repo_full_name=request.repo_full_name,
+        github_token=github_token,
+        branch=request.branch,
+        chunk_size=request.chunk_size,
+        overlap=request.overlap,
+        force_reembed=request.force_reembed
+    )
+
+    return FullPipelineResponse(
+        **result,
+        user=current_user.get('github_username', 'unknown')
+    )
+
+
 @router.post("/repos/ingest", status_code=status.HTTP_202_ACCEPTED, response_model=IngestRepoResponse)
 async def ingest_repository(
     request: IngestRepoRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user)
 ) -> IngestRepoResponse:
-    """
-    Ingest a GitHub repository using the logged-in user's access token
-    
-    Benefits:
-    - Can access user's private repositories
-    - Respects user's repository permissions
-    - No shared GitHub token needed
-    
-    Args:
-        request: Repository details
-        current_user: Authenticated user (token from OAuth)
-        
-    Returns:
-        Ingestion status with user attribution
-    """
-    try:
-        ingester = get_user_ingester(current_user)
-        metadata = ingester.ingest_repository(request.repo_full_name, request.branch)
-        
-        return IngestRepoResponse(
-            success=True,
-            repo=metadata['repo'],
-            total_files=metadata['total_files'],
-            message=f"Successfully ingested {metadata['total_files']} files",
-            user=current_user.get('github_username', 'unknown')
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ingestion failed: {str(e)}"
-        )
+    """Ingest repository via ingest-service."""
+    github_token = get_user_github_token(current_user)
+    repo_access = verify_user_repo_access(current_user, request.repo_full_name)
+    user_id = current_user.get('id')
+
+    _record_user_access(
+        user_id, request.repo_full_name,
+        'write' if repo_access['permissions']['push'] else 'read',
+        repo_access['permissions']
+    )
+
+    result = await ingest_client.ingest_repository(
+        repo_full_name=request.repo_full_name,
+        github_token=github_token,
+        branch=request.branch
+    )
+
+    return IngestRepoResponse(
+        success=result['success'],
+        repo=result['repo'],
+        total_files=result['total_files'],
+        message=result['message'],
+        user=current_user.get('github_username', 'unknown'),
+        was_cached=result['was_cached'],
+        commit_sha=result.get('commit_sha')
+    )
 
 
 @router.post("/repos/process", status_code=status.HTTP_202_ACCEPTED, response_model=ProcessRepoResponse)
 async def process_repository(
     request: ProcessRepoRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user)
 ) -> ProcessRepoResponse:
-    """
-    Process repository into intelligent chunks
-    
-    Step 2: Chunks code with enhanced context extraction
-    
-    Args:
-        request: Processing parameters
-        current_user: Authenticated user
-        
-    Returns:
-        Processing status
-    """
-    try:
-        chunker = EnhancedCodeChunker(PROJECT_ID, BUCKET_RAW, BUCKET_PROCESSED)
-        chunker.chunk_size = request.chunk_size
-        chunker.overlap_lines = request.overlap
-        
-        chunks = chunker.process_repository(request.repo_full_name)
-        
-        return ProcessRepoResponse(
-            success=True,
-            repo=request.repo_full_name,
-            total_chunks=len(chunks),
-            message=f"Successfully created {len(chunks)} chunks"
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Processing failed: {str(e)}"
-        )
+    """Chunk repository via ingest-service."""
+    verify_user_repo_access(current_user, request.repo_full_name)
+    result = await ingest_client.chunk_repository(
+        repo_full_name=request.repo_full_name,
+        chunk_size=request.chunk_size,
+        overlap=request.overlap
+    )
+    return ProcessRepoResponse(**result)
 
 
 @router.post("/repos/embed", status_code=status.HTTP_202_ACCEPTED, response_model=EmbedRepoResponse)
 async def embed_repository(
     request: EmbedRepoRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user)
 ) -> EmbedRepoResponse:
-    """
-    Generate embeddings for repository chunks
-    
-    Step 3: Creates vector embeddings for semantic search
-    
-    Args:
-        request: Embedding parameters
-        current_user: Authenticated user
-        
-    Returns:
-        Embedding status
-    """
-    try:
-        embedder = ChunkEmbedder(PROJECT_ID, BUCKET_PROCESSED)
-        stats = embedder.embed_repository(request.repo_full_name, request.force_reembed)
-        
-        return EmbedRepoResponse(
-            success=True,
-            repo=request.repo_full_name,
-            total_embedded=stats.get('newly_embedded', 0),
-            message=f"Successfully embedded {stats.get('newly_embedded', 0)} chunks"
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Embedding failed: {str(e)}"
-        )
+    """Embed repository via ingest-service."""
+    verify_user_repo_access(current_user, request.repo_full_name)
+    result = await ingest_client.embed_repository(
+        repo_full_name=request.repo_full_name,
+        force_reembed=request.force_reembed
+    )
+    return EmbedRepoResponse(**result)
 
 
 # ==================== RAG SERVICE ENDPOINTS ====================
 
-@router.post("/ask", status_code=status.HTTP_200_OK, response_model=AskQuestionResponse)
+@router.post("/ask", response_model=AskQuestionResponse)
 async def ask_question(
     request: AskQuestionRequest,
     current_user: User = Depends(get_current_user)
 ) -> AskQuestionResponse:
-    """
-    Ask a question about the codebase
-    
-    Uses user's token to access their repositories
-    
-    Args:
-        request: Question and repository
-        current_user: Authenticated user
-        
-    Returns:
-        Answer with source references
-    """
-    rag = get_rag_service(current_user)
-    
-    try:
-        result = rag.answer_question(
-            question=request.question,
-            repo_path=request.repo_full_name,
-            language=request.language,
-            stream=False
-        )
-        
-        return AskQuestionResponse(**result)
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate answer: {str(e)}"
-        )
+    """Ask a question about the codebase."""
+    github_token = get_user_github_token(current_user)
+    repo_access = verify_user_repo_access(current_user, request.repo_full_name)
+    user_id = current_user.get('id')
+
+    _record_user_access(
+        user_id, request.repo_full_name,
+        'write' if repo_access['permissions']['push'] else 'read',
+        repo_access['permissions']
+    )
+
+    result = await ingest_client.ask_question(
+        repo_full_name=request.repo_full_name,
+        question=request.question,
+        github_token=github_token,
+        language=request.language
+    )
+
+    return AskQuestionResponse(**result)
 
 
-@router.post("/docs/generate", status_code=status.HTTP_200_OK, response_model=GenerateDocsResponse)
+@router.post("/docs/generate", response_model=GenerateDocsResponse)
 async def generate_documentation(
     request: GenerateDocsRequest,
     current_user: User = Depends(get_current_user)
 ) -> GenerateDocsResponse:
-    """
-    Generate documentation
-    
-    When push_to_github=true:
-    - Creates branch under user's account
-    - Creates PR attributed to the user
-    - Uses user's permissions
-    
-    Args:
-        request: Documentation parameters
-        current_user: Authenticated user
-        
-    Returns:
-        Generated documentation with optional PR link
-    """
-    rag = get_rag_service(current_user)
-    
+    """Generate documentation."""
+    github_token = get_user_github_token(current_user)
+    repo_access = verify_user_repo_access(current_user, request.repo_full_name)
+    user_id = current_user.get('id')
+
+    if request.push_to_github and not repo_access['permissions']['push']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have push access to this repository"
+        )
+
     valid_doc_types = ['api', 'user_guide', 'technical', 'readme']
     if request.doc_type not in valid_doc_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid doc_type. Must be one of: {valid_doc_types}"
         )
-    
-    try:
-        result = rag.generate_documentation(
-            target=request.target,
-            repo_path=request.repo_full_name,
-            doc_type=request.doc_type,
-            stream=False,
-            push_to_github=request.push_to_github,
-            save_local=request.save_local
-        )
-        
-        response_data = {
-            'documentation': result['documentation'],
-            'type': result['type'],
-            'files_referenced': result['files_referenced'],
-            'local_file': result.get('local_file'),
-            'github_pr': result.get('github', {}).get('pr_url'),
-            'github_branch': result.get('github', {}).get('branch'),
-            'pushed_by': current_user.get('github_username') if request.push_to_github else None
-        }
-        
-        return GenerateDocsResponse(**response_data)
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate documentation: {str(e)}"
-        )
+
+    _record_user_access(
+        user_id, request.repo_full_name,
+        'write' if repo_access['permissions']['push'] else 'read',
+        repo_access['permissions']
+    )
+
+    result = await ingest_client.generate_docs(
+        repo_full_name=request.repo_full_name,
+        target=request.target,
+        github_token=github_token,
+        doc_type=request.doc_type,
+        push_to_github=request.push_to_github
+    )
+
+    return GenerateDocsResponse(
+        documentation=result['documentation'],
+        type=result['type'],
+        files_referenced=result['files_referenced'],
+        github_pr=result.get('github_pr'),
+        github_branch=result.get('github_branch'),
+        pushed_by=current_user.get('github_username') if request.push_to_github else None
+    )
 
 
-@router.post("/code/complete", status_code=status.HTTP_200_OK, response_model=CompleteCodeResponse)
+@router.post("/code/complete", response_model=CompleteCodeResponse)
 async def complete_code(
     request: CompleteCodeRequest,
     current_user: User = Depends(get_current_user)
 ) -> CompleteCodeResponse:
-    """
-    Get intelligent code completion
-    
-    Args:
-        request: Code context and options
-        current_user: Authenticated user
-        
-    Returns:
-        Code completion with optional GitHub PR
-    """
-    rag = get_rag_service(current_user)
-    
-    try:
-        result = rag.complete_code(
-            code_context=request.code_context,
-            cursor_position="",
-            repo_path=request.repo_full_name,
-            language=request.language,
-            stream=False,
-            push_to_github=request.push_to_github,
-            save_local=request.save_local,
-            target_file=request.target_file
-        )
-        
-        response_data = {
-            'completion': result['completion'],
-            'language': result['language'],
-            'confidence': result['confidence'],
-            'local_file': result.get('local_file'),
-            'github_pr': result.get('github', {}).get('pr_url'),
-            'pushed_by': current_user.get('github_username') if request.push_to_github else None
-        }
-        
-        return CompleteCodeResponse(**response_data)
-        
-    except Exception as e:
+    """Get code completion."""
+    github_token = get_user_github_token(current_user)
+    repo_access = verify_user_repo_access(current_user, request.repo_full_name)
+    user_id = current_user.get('id')
+
+    if request.push_to_github and not repo_access['permissions']['push']:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate completion: {str(e)}"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have push access to this repository"
         )
 
+    _record_user_access(user_id, request.repo_full_name, 'read', repo_access['permissions'])
 
-@router.post("/code/edit", status_code=status.HTTP_200_OK, response_model=EditCodeResponse)
+    result = await ingest_client.complete_code(
+        repo_full_name=request.repo_full_name,
+        code_context=request.code_context,
+        github_token=github_token,
+        language=request.language,
+        target_file=request.target_file,
+        push_to_github=request.push_to_github
+    )
+
+    return CompleteCodeResponse(
+        completion=result['completion'],
+        language=result['language'],
+        confidence=result['confidence'],
+        github_pr=result.get('github_pr'),
+        pushed_by=current_user.get('github_username') if request.push_to_github else None
+    )
+
+
+@router.post("/code/edit", response_model=EditCodeResponse)
 async def edit_code(
     request: EditCodeRequest,
     current_user: User = Depends(get_current_user)
 ) -> EditCodeResponse:
-    """
-    Edit code based on instructions
-    
-    When push_to_github=true:
-    - Creates branch under user's account
-    - Commits with user's identity
-    - Creates PR from user's account
-    
-    Args:
-        request: Edit instruction and options
-        current_user: Authenticated user
-        
-    Returns:
-        Modified code with optional PR link
-    """
-    rag = get_rag_service(current_user)
-    
-    try:
-        result = rag.edit_code(
-            instruction=request.instruction,
-            target_file=request.target_file,
-            repo_path=request.repo_full_name,
-            stream=False,
-            push_to_github=request.push_to_github,
-            save_local=request.save_local
-        )
-        
-        if result.get('error'):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=result['error']
-            )
-        
-        response_data = {
-            'modified_code': result['modified_code'],
-            'file': result['file'],
-            'instruction': result['instruction'],
-            'chunks_analyzed': result['chunks_analyzed'],
-            'local_file': result.get('local_file'),
-            'github_pr': result.get('github', {}).get('pr_url'),
-            'github_branch': result.get('github', {}).get('branch'),
-            'pushed_by': current_user.get('github_username') if request.push_to_github else None
-        }
-        
-        return EditCodeResponse(**response_data)
-        
-    except HTTPException:
-        raise
-    except Exception as e:
+    """Edit code based on instructions."""
+    github_token = get_user_github_token(current_user)
+    repo_access = verify_user_repo_access(current_user, request.repo_full_name)
+    user_id = current_user.get('id')
+
+    if request.push_to_github and not repo_access['permissions']['push']:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to edit code: {str(e)}"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have push access to this repository"
         )
 
+    _record_user_access(
+        user_id, request.repo_full_name,
+        'write' if repo_access['permissions']['push'] else 'read',
+        repo_access['permissions']
+    )
 
-@router.post("/search", status_code=status.HTTP_200_OK, response_model=SearchCodeResponse)
+    result = await ingest_client.edit_code(
+        repo_full_name=request.repo_full_name,
+        instruction=request.instruction,
+        target_file=request.target_file,
+        github_token=github_token,
+        push_to_github=request.push_to_github
+    )
+
+    return EditCodeResponse(
+        modified_code=result['modified_code'],
+        file=result['file'],
+        instruction=result['instruction'],
+        chunks_analyzed=result['chunks_analyzed'],
+        github_pr=result.get('github_pr'),
+        github_branch=result.get('github_branch'),
+        pushed_by=current_user.get('github_username') if request.push_to_github else None
+    )
+
+
+@router.post("/search", response_model=SearchCodeResponse)
 async def search_code(
     request: SearchCodeRequest,
     current_user: User = Depends(get_current_user)
 ) -> SearchCodeResponse:
-    """
-    Search code using semantic or keyword search
-    
-    Args:
-        request: Search query
-        current_user: Authenticated user
-        
-    Returns:
-        Relevant code chunks
-    """
-    rag = get_rag_service(current_user)
-    
-    try:
-        chunks = rag.search.search(
-            query=request.query,
-            repo_path=request.repo_full_name,
-            top_k=request.top_k,
-            filter_language=request.language
-        )
-        
-        results = [
-            {
-                'file_path': chunk['file_path'],
-                'chunk_type': chunk['chunk_type'],
-                'language': chunk['language'],
-                'lines': f"{chunk['start_line']}-{chunk['end_line']}",
-                'content': chunk['content'][:500],
-                'summary': chunk.get('summary', '')
-            }
-            for chunk in chunks
-        ]
-        
-        return SearchCodeResponse(
-            results=results,
-            total_found=len(results)
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Search failed: {str(e)}"
-        )
+    """Search code."""
+    repo_access = verify_user_repo_access(current_user, request.repo_full_name)
+    user_id = current_user.get('id')
+
+    _record_user_access(user_id, request.repo_full_name, 'read', repo_access['permissions'])
+
+    result = await ingest_client.search_code(
+        repo_full_name=request.repo_full_name,
+        query=request.query,
+        language=request.language,
+        top_k=request.top_k
+    )
+
+    return SearchCodeResponse(**result)
 
 
 # ==================== STREAMING ENDPOINTS ====================
+# Note: Streaming goes directly to ingest-service via proxy
+# Backend adds auth then forwards the stream
 
 @router.post("/ask/stream")
 async def ask_question_stream(
     request: AskQuestionRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Ask question with streaming response"""
-    rag = get_rag_service(current_user)
-    
+    """Ask question with streaming response."""
+    github_token = get_user_github_token(current_user)
+    repo_access = verify_user_repo_access(current_user, request.repo_full_name)
+    user_id = current_user.get('id')
+
+    _record_user_access(user_id, request.repo_full_name, 'read', repo_access['permissions'])
+
+    import httpx
+    from app.clients.ingest_service import INGEST_SERVICE_URL
+
     async def generate():
-        try:
-            result = rag.answer_question(
-                question=request.question,
-                repo_path=request.repo_full_name,
-                language=request.language,
-                stream=True
-            )
-            
-            for chunk in result['answer_stream']:
-                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-            
-            yield f"data: {json.dumps({'type': 'sources', 'sources': result['sources']})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-            
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-    
+        async with httpx.AsyncClient() as client:
+            try:
+                async with client.stream(
+                    "POST",
+                    f"{INGEST_SERVICE_URL}/pipeline/ask/stream",
+                    json={
+                        "repo_full_name": request.repo_full_name,
+                        "question": request.question,
+                        "github_token": github_token,
+                        "language": request.language
+                    },
+                    timeout=300.0
+                ) as response:
+                    async for chunk in response.aiter_text():
+                        yield chunk
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @router.post("/docs/generate/stream")
-async def generate_documentation_stream(
+async def generate_docs_stream(
     request: GenerateDocsRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Generate documentation with streaming response"""
-    rag = get_rag_service(current_user)
-    
+    """Generate documentation with streaming."""
+    github_token = get_user_github_token(current_user)
+    repo_access = verify_user_repo_access(current_user, request.repo_full_name)
+    user_id = current_user.get('id')
+
+    if request.push_to_github and not repo_access['permissions']['push']:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No push access")
+
+    _record_user_access(user_id, request.repo_full_name, 'read', repo_access['permissions'])
+
+    import httpx
+    from app.clients.ingest_service import INGEST_SERVICE_URL
+
     async def generate():
-        try:
-            result = rag.generate_documentation(
-                target=request.target,
-                repo_path=request.repo_full_name,
-                doc_type=request.doc_type,
-                stream=True,
-                push_to_github=False,
-                save_local=False
-            )
-            
-            full_response = []
-            
-            for chunk in result['documentation_stream']:
-                full_response.append(chunk)
-                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-            
-            complete_doc = ''.join(full_response)
-            
-            if request.save_local:
-                local_path = rag.doc_manager.save_documentation(
-                    complete_doc, request.target, request.doc_type, request.repo_full_name
-                )
-                yield f"data: {json.dumps({'type': 'saved', 'path': local_path})}\n\n"
-            
-            if request.push_to_github:
-                github_result = rag.github_client.push_documentation(
-                    request.repo_full_name, complete_doc, request.target, 
-                    request.doc_type, create_pr=True
-                )
-                if github_result.get('success'):
-                    yield f"data: {json.dumps({'type': 'pushed', 'pr_url': github_result.get('pr_url'), 'branch': github_result.get('branch'), 'user': current_user.get('github_username')})}\n\n"
-            
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-            
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-    
+        async with httpx.AsyncClient() as client:
+            try:
+                async with client.stream(
+                    "POST",
+                    f"{INGEST_SERVICE_URL}/pipeline/docs/generate/stream",
+                    json={
+                        "repo_full_name": request.repo_full_name,
+                        "target": request.target,
+                        "doc_type": request.doc_type,
+                        "github_token": github_token,
+                        "push_to_github": request.push_to_github
+                    },
+                    timeout=300.0
+                ) as response:
+                    async for chunk in response.aiter_text():
+                        yield chunk
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
@@ -701,95 +660,138 @@ async def edit_code_stream(
     request: EditCodeRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Edit code with streaming response"""
-    rag = get_rag_service(current_user)
-    
+    """Edit code with streaming."""
+    github_token = get_user_github_token(current_user)
+    repo_access = verify_user_repo_access(current_user, request.repo_full_name)
+    user_id = current_user.get('id')
+
+    if request.push_to_github and not repo_access['permissions']['push']:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No push access")
+
+    _record_user_access(
+        user_id, request.repo_full_name,
+        'write' if repo_access['permissions']['push'] else 'read',
+        repo_access['permissions']
+    )
+
+    import httpx
+    from app.clients.ingest_service import INGEST_SERVICE_URL
+
     async def generate():
-        try:
-            result = rag.edit_code(
-                instruction=request.instruction,
-                target_file=request.target_file,
-                repo_path=request.repo_full_name,
-                stream=True,
-                push_to_github=False,
-                save_local=False
-            )
-            
-            full_response = []
-            
-            for chunk in result['modified_code_stream']:
-                full_response.append(chunk)
-                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-            
-            complete_code = ''.join(full_response)
-            code_content = rag._extract_code_from_response(complete_code)
-            
-            if request.save_local:
-                local_path = rag.doc_manager.save_edited_code(
-                    code_content, request.target_file, request.repo_full_name, request.instruction
-                )
-                yield f"data: {json.dumps({'type': 'saved', 'path': local_path})}\n\n"
-            
-            if request.push_to_github:
-                github_result = rag.github_client.create_branch_and_push_code(
-                    request.repo_full_name, request.target_file, code_content, request.instruction
-                )
-                if github_result.get('success'):
-                    yield f"data: {json.dumps({'type': 'pushed', 'pr_url': github_result.get('pr_url'), 'branch': github_result.get('branch'), 'user': current_user.get('github_username')})}\n\n"
-            
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-            
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-    
+        async with httpx.AsyncClient() as client:
+            try:
+                async with client.stream(
+                    "POST",
+                    f"{INGEST_SERVICE_URL}/pipeline/code/edit/stream",
+                    json={
+                        "repo_full_name": request.repo_full_name,
+                        "instruction": request.instruction,
+                        "target_file": request.target_file,
+                        "github_token": github_token,
+                        "push_to_github": request.push_to_github
+                    },
+                    timeout=300.0
+                ) as response:
+                    async for chunk in response.aiter_text():
+                        yield chunk
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
-# ==================== REPOSITORY MANAGEMENT ====================
+# ==================== USER REPOSITORY MANAGEMENT ====================
 
-@router.get("/repos/user", status_code=status.HTTP_200_OK)
-async def list_user_repos(
+@router.get("/repos/user/history")
+async def get_user_repo_history(
     current_user: User = Depends(get_current_user)
 ) -> List[Dict]:
-    """
-    List all repositories accessible to the current user
-    
-    Shows both indexed and non-indexed repos
-    
-    Args:
-        current_user: Authenticated user
-        
-    Returns:
-        List of user's repositories with index status
-    """
-    from github import Github
-    
+    """Get user's repository access history with status."""
     try:
-        github_token = get_user_github_token(current_user)
-        github_client = Github(github_token)
-        
-        user = github_client.get_user()
-        repos = []
-        
-        # Check GCS for indexed repos
-        from google.cloud import storage
-        gcs_client = storage.Client(project=PROJECT_ID)
-        bucket = gcs_client.bucket(BUCKET_PROCESSED)
-        
-        for gh_repo in user.get_repos():
-            repo_path = gh_repo.full_name
-            chunks_blob = bucket.blob(f"{repo_path}/chunks.jsonl")
-            
-            is_indexed = chunks_blob.exists()
+        user_id = current_user.get('id')
+        user_repos = _get_user_repos(user_id)
+
+        results = []
+
+        for repo in user_repos:
+            access_info = _get_access_info(user_id, repo)
+
+            # Check chunk status
+            repo_path = _get_shared_repo_path(repo)
+            chunks_blob = _processed_bucket.blob(f"{repo_path}/chunks.jsonl")
+
+            indexed = chunks_blob.exists()
             chunk_count = 0
             has_embeddings = False
-            
+
+            if indexed:
+                content = chunks_blob.download_as_text()
+                chunks = [json.loads(line) for line in content.split('\n') if line.strip()]
+                chunk_count = len(chunks)
+                has_embeddings = all(c.get('embedding') for c in chunks) if chunks else False
+
+            commit_info = _get_commit_info(repo)
+            preferences = _get_user_preferences(user_id, repo)
+
+            results.append({
+                'repo': repo,
+                'indexed': indexed,
+                'total_chunks': chunk_count,
+                'has_embeddings': has_embeddings,
+                'ready_for_rag': indexed and has_embeddings,
+                'access_level': access_info.get('access_level', 'read') if access_info else 'read',
+                'permissions': access_info.get('github_permissions', {}) if access_info else {},
+                'first_accessed': access_info.get('first_accessed') if access_info else None,
+                'last_accessed': access_info.get('last_accessed') if access_info else None,
+                'access_count': access_info.get('access_count', 0) if access_info else 0,
+                'last_commit_sha': commit_info.get('commit_sha', '')[:8] if commit_info else None,
+                'last_commit_author': commit_info.get('author') if commit_info else None,
+                'last_updated': commit_info.get('processed_at') if commit_info else None,
+                'favorite': preferences.get('favorite', False),
+                'auto_push': preferences.get('auto_push_prs', False)
+            })
+
+        results.sort(key=lambda x: x.get('last_accessed', ''), reverse=True)
+        return results
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get history: {str(e)}"
+        )
+
+
+@router.get("/repos/user/all")
+async def list_user_github_repos(
+    indexed_only: bool = False,
+    current_user: User = Depends(get_current_user)
+) -> List[Dict]:
+    """List ALL user's GitHub repositories with index status."""
+    try:
+        github_token = get_user_github_token(current_user)
+        gh = Github(github_token)
+        user = gh.get_user()
+
+        repos = []
+
+        for gh_repo in user.get_repos():
+            repo_path = _get_shared_repo_path(gh_repo.full_name)
+            chunks_blob = _processed_bucket.blob(f"{repo_path}/chunks.jsonl")
+
+            is_indexed = chunks_blob.exists()
+
+            if indexed_only and not is_indexed:
+                continue
+
+            chunk_count = 0
+            has_embeddings = False
+
             if is_indexed:
                 content = chunks_blob.download_as_text()
                 chunks = [json.loads(line) for line in content.split('\n') if line.strip()]
                 chunk_count = len(chunks)
                 has_embeddings = all(c.get('embedding') for c in chunks) if chunks else False
-            
+
             repos.append({
                 'full_name': gh_repo.full_name,
                 'name': gh_repo.name,
@@ -804,9 +806,9 @@ async def list_user_repos(
                 'has_embeddings': has_embeddings,
                 'ready_for_rag': is_indexed and has_embeddings
             })
-        
+
         return repos
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -814,180 +816,100 @@ async def list_user_repos(
         )
 
 
-@router.get("/repos/{owner}/{repo}/status", status_code=status.HTTP_200_OK)
+# ==================== REPO STATUS & HISTORY ====================
+
+@router.get("/repos/{owner}/{repo}/status")
 async def get_repository_status(
-    owner: str,
-    repo: str,
+    owner: str, repo: str,
     current_user: User = Depends(get_current_user)
 ) -> Dict:
-    """
-    Check repository index status
-    
-    Returns pipeline completion status:
-    - Ingested (files in GCS)
-    - Chunked (intelligent chunks created)
-    - Embedded (vector embeddings ready)
-    
-    Args:
-        owner: Repository owner
-        repo: Repository name
-        current_user: Authenticated user
-        
-    Returns:
-        Detailed pipeline status
-    """
-    from google.cloud import storage
-    
-    repo_path = f"{owner}/{repo}"
-    client = storage.Client(project=PROJECT_ID)
-    
-    status_info = {
-        'repo': repo_path,
-        'ingested': False,
-        'chunked': False,
-        'embedded': False,
-        'ready_for_rag': False,
-        'total_files': 0,
-        'total_chunks': 0,
-        'chunks_with_embeddings': 0,
-        'pipeline_progress': 0  # 0-100%
-    }
-    
-    try:
-        # Check ingestion
-        raw_bucket = client.bucket(BUCKET_RAW)
-        metadata_blob = raw_bucket.blob(f"{repo_path}/metadata.json")
-        
-        if metadata_blob.exists():
-            status_info['ingested'] = True
-            status_info['pipeline_progress'] = 33
-            metadata = json.loads(metadata_blob.download_as_text())
-            status_info['total_files'] = metadata.get('total_files', 0)
-        
-        # Check chunking
-        processed_bucket = client.bucket(BUCKET_PROCESSED)
-        chunks_blob = processed_bucket.blob(f"{repo_path}/chunks.jsonl")
-        
-        if chunks_blob.exists():
-            status_info['chunked'] = True
-            status_info['pipeline_progress'] = 66
-            content = chunks_blob.download_as_text()
-            chunks = [json.loads(line) for line in content.split('\n') if line.strip()]
-            status_info['total_chunks'] = len(chunks)
-            
-            # Check embeddings
-            chunks_with_emb = sum(1 for c in chunks if c.get('embedding'))
-            status_info['chunks_with_embeddings'] = chunks_with_emb
-            
-            if chunks_with_emb == len(chunks) and len(chunks) > 0:
-                status_info['embedded'] = True
-                status_info['pipeline_progress'] = 100
-                status_info['ready_for_rag'] = True
-        
-        return status_info
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to check status: {str(e)}"
-        )
+    """Get detailed repository status."""
+    result = await ingest_client.get_repo_status(owner, repo)
+
+    # Add user access info
+    user_id = current_user.get('id')
+    repo_full_name = f"{owner}/{repo}"
+    access_info = _get_access_info(user_id, repo_full_name)
+    if access_info:
+        result['user_access'] = {
+            'access_level': access_info.get('access_level'),
+            'first_accessed': access_info.get('first_accessed'),
+            'last_accessed': access_info.get('last_accessed'),
+            'access_count': access_info.get('access_count', 0)
+        }
+
+    return result
 
 
-@router.get("/repos/{owner}/{repo}/access", status_code=status.HTTP_200_OK)
+@router.get("/repos/{owner}/{repo}/commit-history")
+async def get_repo_commit_history(
+    owner: str, repo: str, limit: int = 10,
+    current_user: User = Depends(get_current_user)
+) -> List[Dict]:
+    """Get processing history for a repository."""
+    repo_full_name = f"{owner}/{repo}"
+    return _get_commit_history(repo_full_name, limit)
+
+
+@router.get("/repos/{owner}/{repo}/access")
 async def check_repo_access(
-    owner: str,
-    repo: str,
+    owner: str, repo: str,
     current_user: User = Depends(get_current_user)
 ) -> Dict:
-    """
-    Check if user has access to a repository
-    
-    Verifies user's permissions before ingestion
-    
-    Args:
-        owner: Repository owner
-        repo: Repository name
-        current_user: Authenticated user
-        
-    Returns:
-        Access permissions and capabilities
-    """
-    from github import Github, GithubException
-    
+    """Check user's access to a repository."""
+    repo_full_name = f"{owner}/{repo}"
     try:
-        github_token = get_user_github_token(current_user)
-        github_client = Github(github_token)
-        
-        gh_repo = github_client.get_repo(f"{owner}/{repo}")
-        permissions = gh_repo.permissions
-        
+        repo_access = verify_user_repo_access(current_user, repo_full_name)
         return {
             'has_access': True,
-            'repo': f"{owner}/{repo}",
-            'permissions': {
-                'admin': permissions.admin,
-                'push': permissions.push,
-                'pull': permissions.pull
-            },
-            'private': gh_repo.private,
+            'repo': repo_full_name,
+            'permissions': repo_access['permissions'],
+            'private': repo_access['repo'].private,
             'can_ingest': True,
-            'can_push': permissions.push or permissions.admin,
+            'can_push': repo_access['permissions']['push'] or repo_access['permissions']['admin'],
             'message': 'User has access to this repository'
         }
-        
-    except GithubException as e:
-        if e.status == 404:
-            return {
-                'has_access': False,
-                'repo': f"{owner}/{repo}",
-                'message': 'Repository not found or no access',
-                'can_ingest': False,
-                'can_push': False
-            }
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to check access: {str(e)}"
-        )
+    except HTTPException as e:
+        return {
+            'has_access': False,
+            'repo': repo_full_name,
+            'message': str(e.detail),
+            'can_ingest': False,
+            'can_push': False
+        }
 
 
-@router.get("/repos/indexed", status_code=status.HTTP_200_OK)
+@router.get("/repos/indexed")
 async def list_indexed_repos(
     current_user: User = Depends(get_current_user)
 ) -> List[Dict]:
-    """
-    List all indexed repositories in the system
-    
-    Args:
-        current_user: Authenticated user
-        
-    Returns:
-        All indexed repositories (system-wide)
-    """
-    from google.cloud import storage
-    
+    """List all indexed repositories."""
     try:
-        client = storage.Client(project=PROJECT_ID)
-        bucket = client.bucket(BUCKET_PROCESSED)
-        
-        blobs = bucket.list_blobs(delimiter='/')
         repos = []
-        
-        for prefix in blobs.prefixes:
-            repo_path = prefix.rstrip('/')
-            chunks_blob = bucket.blob(f"{repo_path}/chunks.jsonl")
-            
-            if chunks_blob.exists():
-                content = chunks_blob.download_as_text()
-                chunk_count = len([line for line in content.split('\n') if line.strip()])
-                
-                repos.append({
-                    'repo': repo_path,
-                    'total_chunks': chunk_count,
-                    'storage_url': f"gs://{BUCKET_PROCESSED}/{repo_path}/chunks.jsonl"
-                })
-        
+        all_blobs = _processed_bucket.list_blobs(prefix='repos/')
+
+        for blob in all_blobs:
+            if blob.name.endswith('chunks.jsonl'):
+                parts = blob.name.split('/')
+                if len(parts) >= 4:
+                    repo_full_name = f"{parts[1]}/{parts[2]}"
+                    try:
+                        content = blob.download_as_text()
+                        chunk_count = len([l for l in content.split('\n') if l.strip()])
+                        commit_info = _get_commit_info(repo_full_name)
+                        repos.append({
+                            'repo': repo_full_name,
+                            'total_chunks': chunk_count,
+                            'storage_path': f"repos/{repo_full_name}",
+                            'last_commit': commit_info.get('commit_sha', '')[:8] if commit_info else None,
+                            'last_updated': commit_info.get('processed_at') if commit_info else None,
+                            'last_author': commit_info.get('author') if commit_info else None
+                        })
+                    except Exception as e:
+                        print(f"⚠️  Error processing {repo_full_name}: {e}")
+
         return repos
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -995,44 +917,100 @@ async def list_indexed_repos(
         )
 
 
-@router.get("/health", status_code=status.HTTP_200_OK)
+# ==================== USER PREFERENCES ====================
+
+@router.post("/repos/user/preferences")
+async def save_user_preferences(
+    request: UserPreferencesRequest,
+    current_user: User = Depends(get_current_user)
+) -> Dict:
+    """Save user's preferences for a repository."""
+    user_id = current_user.get('id')
+    preferences = {}
+    if request.preferred_doc_type:
+        preferences['doc_type'] = request.preferred_doc_type
+    if request.preferred_chunk_size:
+        preferences['chunk_size'] = request.preferred_chunk_size
+    if request.auto_push_prs is not None:
+        preferences['auto_push'] = request.auto_push_prs
+    if request.favorite is not None:
+        preferences['favorite'] = request.favorite
+    if request.notifications is not None:
+        preferences['notifications'] = request.notifications
+
+    _save_user_preferences(user_id, request.repo_full_name, preferences)
+    return {'success': True, 'message': 'Preferences saved', 'repo': request.repo_full_name}
+
+
+@router.get("/repos/{owner}/{repo}/preferences")
+async def get_user_preferences_endpoint(
+    owner: str, repo: str,
+    current_user: User = Depends(get_current_user)
+) -> Dict:
+    """Get user's preferences for a repository."""
+    user_id = current_user.get('id')
+    repo_full_name = f"{owner}/{repo}"
+    preferences = _get_user_preferences(user_id, repo_full_name)
+    return {'repo': repo_full_name, 'preferences': preferences}
+
+
+# ==================== HEALTH & STATS ====================
+
+@router.get("/health")
 async def rag_health() -> Dict:
-    """
-    Check RAG service health
-    
-    Returns:
-        Health status and available features
-    """
+    """Check RAG service health including ingest-service."""
+    ingest_health = await ingest_client.health_check()
+    return {
+        "status": "healthy",
+        "project_id": PROJECT_ID,
+        "ingest_service": ingest_health,
+        "features": {
+            "ingestion": True, "chunking": True, "embedding": True,
+            "qa": True, "documentation": True, "code_completion": True,
+            "code_editing": True, "github_push": True, "streaming": True,
+            "commit_tracking": True, "smart_caching": True,
+            "multi_user": True, "user_preferences": True
+        }
+    }
+
+
+@router.get("/stats")
+async def get_system_stats(
+    current_user: User = Depends(get_current_user)
+) -> Dict:
+    """Get system statistics."""
     try:
-        from google.cloud import storage
-        client = storage.Client(project=PROJECT_ID)
-        
+        total_repos = 0
+        total_chunks = 0
+        repos_found = set()
+
+        all_blobs = _processed_bucket.list_blobs(prefix='repos/')
+        for blob in all_blobs:
+            if blob.name.endswith('chunks.jsonl'):
+                parts = blob.name.split('/')
+                if len(parts) >= 4:
+                    repo_full_name = f"{parts[1]}/{parts[2]}"
+                    repos_found.add(repo_full_name)
+                    try:
+                        content = blob.download_as_text()
+                        total_chunks += len([l for l in content.split('\n') if l.strip()])
+                    except Exception:
+                        pass
+
+        user_blobs = _processed_bucket.list_blobs(prefix='user_data/', delimiter='/')
+        total_users = sum(1 for _ in user_blobs.prefixes)
+
         return {
-            "status": "healthy",
-            "project_id": PROJECT_ID,
-            "buckets": {
-                "raw": BUCKET_RAW,
-                "processed": BUCKET_PROCESSED
-            },
-            "features": {
-                "ingestion": True,
-                "chunking": True,
-                "embedding": True,
-                "qa": True,
-                "documentation": True,
-                "code_completion": True,
-                "code_editing": True,
-                "github_push": True,
-                "local_save": True,
-                "streaming": True,
-                "user_tokens": True,
-                "private_repos": True
-            },
-            "authentication": "User OAuth tokens from session"
+            'total_indexed_repos': len(repos_found),
+            'indexed_repos': sorted(list(repos_found)),
+            'total_chunks': total_chunks,
+            'total_users_accessed': total_users,
+            'storage_architecture': 'shared',
+            'project_id': PROJECT_ID
         }
-        
+
     except Exception as e:
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get stats: {str(e)}"
+        )

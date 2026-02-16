@@ -1,3 +1,4 @@
+#config.py
 """
 Backend configuration loader
 Loads: otto/.env (shared) + backend/.env.local (backend-specific)
@@ -9,6 +10,7 @@ from pathlib import Path
 # Get directories
 BACKEND_DIR = Path(__file__).parent.parent  # backend/
 PROJECT_ROOT = BACKEND_DIR.parent           # otto/
+INGEST_SERVICE_URL = os.getenv("INGEST_SERVICE_URL", "http://localhost:8081")
 
 print(f"Backend dir: {BACKEND_DIR}")
 print(f"Project root: {PROJECT_ROOT}")
@@ -37,6 +39,10 @@ GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 GITHUB_PRIVATE_KEY_PATH = os.getenv("GITHUB_PRIVATE_KEY_PATH")
 GITHUB_CALLBACK_URL = os.getenv("GITHUB_CALLBACK_URL")
+GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET")
+
+if not GITHUB_WEBHOOK_SECRET:
+    print("⚠️  WARNING: GITHUB_WEBHOOK_SECRET not set - webhooks will be insecure")
 
 # Load GitHub private key
 if GITHUB_PRIVATE_KEY_PATH and os.path.exists(GITHUB_PRIVATE_KEY_PATH):
