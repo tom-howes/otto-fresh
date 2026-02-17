@@ -106,8 +106,6 @@ def verify_webhook_signature(payload_body: bytes, signature_header: str) -> bool
     return hmac.compare_digest(expected_signature, signature_header)
 
 
-# In webhook.py, replace the run_rag_update_pipeline function:
-
 async def run_rag_update_pipeline(
     repo_full_name: str,
     branch: str,
@@ -141,6 +139,7 @@ async def run_rag_update_pipeline(
 
     except Exception as e:
         print(f"\n❌ WEBHOOK PIPELINE FAILED: {str(e)}")
+
 
 # ==================== WEBHOOK ENDPOINTS ====================
 
@@ -204,8 +203,9 @@ async def _handle_push_event(payload: dict, background_tasks: BackgroundTasks) -
     
     Checks:
     1. Is it a branch push (not tag)?
-    2. Is the repo indexed in our system?
-    3. Is the repo owner currently logged in?
+    2. Is the repo owner currently logged in?
+    3. Is the repo indexed in our system? (shared chunks exist)
+    4. Does the commit SHA differ from what we have?
     
     If all pass, queues the RAG update pipeline.
     """
@@ -222,7 +222,6 @@ async def _handle_push_event(payload: dict, background_tasks: BackgroundTasks) -
     commit_author = head_commit.get("author", {}).get("username", "unknown") if head_commit else "unknown"
     
     # Extract branch name from ref
-    # ref format: refs/heads/branch_name
     if not ref.startswith("refs/heads/"):
         print(f"ℹ️  Ignoring non-branch push: {ref}")
         return {
@@ -255,35 +254,51 @@ async def _handle_push_event(payload: dict, background_tasks: BackgroundTasks) -
             "reason": "Repository owner is not currently logged in"
         }
     
-    # ---- Check if repo is indexed ----
-    import os, sys
-    INGEST_SERVICE_PATH = os.path.join(os.path.dirname(__file__), '../../../ingest-service')
-    sys.path.insert(0, INGEST_SERVICE_PATH)
+    # ---- Check if repo is indexed (SHARED storage) via ingest-service API ----
+    from app.clients.ingest_service import IngestServiceClient
     
-    from src.utils.commit_tracker import CommitTracker
-    
-    PROJECT_ID = os.getenv("GCP_PROJECT_ID", "otto-486221")
-    BUCKET_PROCESSED = os.getenv("GCS_BUCKET_PROCESSED", "otto-processed-chunks")
-    
-    commit_tracker = CommitTracker(PROJECT_ID, BUCKET_PROCESSED)
-    last_commit = commit_tracker.get_last_commit(repo_full_name)
-    
-    if not last_commit:
-        print(f"ℹ️  Repo {repo_full_name} not previously indexed - skipping webhook update")
+    try:
+        client = IngestServiceClient()
+        owner, repo = repo_full_name.split('/')
+        status_result = await client.get_repo_status(owner, repo)
+        
+        # Check if repo has been indexed at all (by any user)
+        if not status_result.get('ingested'):
+            print(f"ℹ️  Repo {repo_full_name} has never been indexed - skipping webhook")
+            print(f"     (User must manually run pipeline first)")
+            return {
+                "status": "skipped",
+                "repo": repo_full_name,
+                "reason": "Repository has not been indexed through Otto yet. Please run /rag/repos/pipeline first."
+            }
+        
+        # Repo is indexed! Now check if we need to update
+        commit_info = status_result.get('commit_info', {})
+        
+        if not commit_info:
+            print(f"⚠️  Repo indexed but no commit info found - will re-index")
+        else:
+            last_commit_sha = commit_info.get('sha', '')
+            
+            # Check if we're already up to date
+            if last_commit_sha == commit_sha[:8]:  # commit_info stores short SHA
+                print(f"✓ Repo already up to date ({commit_sha[:8]})")
+                return {
+                    "status": "skipped",
+                    "repo": repo_full_name,
+                    "commit": commit_sha[:8],
+                    "reason": "Repository is already up to date with this commit"
+                }
+            
+            print(f"📝 Update needed: {last_commit_sha} → {commit_sha[:8]}")
+        
+    except Exception as e:
+        print(f"⚠️  Could not check repo status: {e}")
+        # If we can't check status, skip the update to be safe
         return {
-            "status": "skipped",
+            "status": "error",
             "repo": repo_full_name,
-            "reason": "Repository has not been indexed through Otto yet"
-        }
-    
-    # ---- Check if this is the tracked branch ----
-    tracked_branch = last_commit.get('branch', 'main')
-    if branch != tracked_branch:
-        print(f"ℹ️  Push to {branch} but tracking {tracked_branch} - skipping")
-        return {
-            "status": "skipped",
-            "repo": repo_full_name,
-            "reason": f"Push to '{branch}' but tracking '{tracked_branch}'"
+            "reason": f"Could not verify repo status: {str(e)}"
         }
     
     # ---- Queue background pipeline ----
@@ -305,7 +320,8 @@ async def _handle_push_event(payload: dict, background_tasks: BackgroundTasks) -
         "branch": branch,
         "commit": commit_sha[:8] if commit_sha else "unknown",
         "message": "RAG update pipeline queued",
-        "triggered_by": commit_author
+        "triggered_by": commit_author,
+        "previous_commit": commit_info.get('sha') if commit_info else None
     }
 
 

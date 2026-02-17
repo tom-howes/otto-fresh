@@ -1,7 +1,6 @@
-#config.py
+# backend/app/config.py
 """
 Backend configuration loader
-Loads: otto/.env (shared) + backend/.env.local (backend-specific)
 """
 from dotenv import load_dotenv
 import os
@@ -10,28 +9,26 @@ from pathlib import Path
 # Get directories
 BACKEND_DIR = Path(__file__).parent.parent  # backend/
 PROJECT_ROOT = BACKEND_DIR.parent           # otto/
-INGEST_SERVICE_URL = os.getenv("INGEST_SERVICE_URL", "http://localhost:8081")
 
 print(f"Backend dir: {BACKEND_DIR}")
 print(f"Project root: {PROJECT_ROOT}")
 
-# 1. Load SHARED .env from project root (otto/.env)
+# 1. Load SHARED .env from project root (otto/.env) - ONLY FOR LOCAL
 shared_env = PROJECT_ROOT / '.env'
 if shared_env.exists():
     load_dotenv(shared_env)
     print(f"✓ Loaded shared config: {shared_env}")
 else:
-    print(f"❌ ERROR: Shared .env not found at: {shared_env}")
-    print(f"   Create it: cp {PROJECT_ROOT}/.env.example {shared_env}")
+    # In Cloud Run, .env won't exist - env vars come from deployment
+    print(f"ℹ️  No shared .env found (expected in Cloud Run)")
 
-# 2. Load BACKEND .env.local (overrides shared)
+# 2. Load BACKEND .env.local (overrides shared) - ONLY FOR LOCAL
 local_env = BACKEND_DIR / '.env.local'
 if local_env.exists():
     load_dotenv(local_env, override=True)
     print(f"✓ Loaded backend config: {local_env}")
 else:
-    print(f"❌ ERROR: Backend .env.local not found at: {local_env}")
-    print(f"   This file is REQUIRED for Firebase and JWT config")
+    print(f"ℹ️  No backend .env.local found (expected in Cloud Run)")
 
 # ==================== GITHUB CONFIGURATION ====================
 GITHUB_APP_ID = os.getenv("GITHUB_APP_ID")
@@ -50,7 +47,7 @@ if GITHUB_PRIVATE_KEY_PATH and os.path.exists(GITHUB_PRIVATE_KEY_PATH):
         GITHUB_PRIVATE_KEY = f.read()
 else:
     GITHUB_PRIVATE_KEY = None
-    print("❌ ERROR: GitHub private key not found")
+    print("⚠️  WARNING: GitHub private key not found")
 
 # ==================== FIREBASE CONFIGURATION ====================
 FIREBASE_CREDENTIALS_PATH = os.getenv("FIREBASE_CREDENTIALS_PATH")
@@ -60,14 +57,26 @@ FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID")
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 
 if not JWT_SECRET_KEY:
-    print("❌ ERROR: JWT_SECRET_KEY not set in backend/.env.local")
-    print("   Generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\"")
+    print("⚠️  WARNING: JWT_SECRET_KEY not set")
 
-# ==================== RAG CONFIGURATION (from shared .env) ====================
+# ==================== RAG CONFIGURATION ====================
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 GCS_BUCKET_RAW = os.getenv("GCS_BUCKET_RAW")
 GCS_BUCKET_PROCESSED = os.getenv("GCS_BUCKET_PROCESSED")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# ==================== INGEST SERVICE URL ====================
+# CRITICAL: Must have http:// or https:// prefix
+INGEST_SERVICE_URL = os.getenv("INGEST_SERVICE_URL", "http://localhost:8081")
+
+# Validate URL format
+if INGEST_SERVICE_URL and not INGEST_SERVICE_URL.startswith(("http://", "https://")):
+    print(f"❌ ERROR: INGEST_SERVICE_URL must start with http:// or https://")
+    print(f"   Current value: {INGEST_SERVICE_URL}")
+    INGEST_SERVICE_URL = f"https://{INGEST_SERVICE_URL}"
+    print(f"   Auto-corrected to: {INGEST_SERVICE_URL}")
+
+print(f"✓ Ingest service URL: {INGEST_SERVICE_URL}")
 
 # ==================== SERVER CONFIGURATION ====================
 PORT = int(os.getenv("PORT", 8000))
