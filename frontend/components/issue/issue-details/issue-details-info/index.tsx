@@ -15,6 +15,7 @@ import { ChildIssueList } from "./issue-details-info-child-issues";
 import { hasChildren, isEpic } from "@/utils/helpers";
 import { ColorPicker } from "@/components/color-picker";
 import { useContainerWidth } from "@/hooks/use-container-width";
+import { OttoTicketPanel } from "@/components/otto-agent/otto-ticket-panel";
 import Split from "react-split";
 import "@/styles/split.css";
 
@@ -101,6 +102,7 @@ const SmallIssueDetailsInfo = React.forwardRef<
       <IssueDetailsInfoAccordion issue={issue} />
       <IssueMetaInfo issue={issue} />
       <Comments issue={issue} />
+      <OttoTicketPanel issue={issue} />
     </Fragment>
   );
 });
@@ -158,6 +160,7 @@ const LargeIssueDetails = React.forwardRef<
           />
         ) : null}
         <Comments issue={issue} />
+        <OttoTicketPanel issue={issue} />
       </div>
 
       <div className="mt-4 bg-white pl-3">

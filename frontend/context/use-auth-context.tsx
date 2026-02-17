@@ -49,7 +49,7 @@ const AuthContext = createContext<AuthContextProps>({
   refetchWorkspaces: async () => {},
 });
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://backend-service-484671782718.us-east1.run.app";
+const API_BASE_URL = "/api";
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
