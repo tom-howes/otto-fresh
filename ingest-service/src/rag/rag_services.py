@@ -1,3 +1,4 @@
+# ingest-service/src/rag/rag_services.py
 """
 RAG Services: Q&A, Documentation, Code Completion, Code Editing
 WITH STREAMING SUPPORT + GitHub Integration + Local Save
@@ -8,6 +9,7 @@ from .vector_search import VectorSearch
 from ..github.github_client import GitHubClient
 from ..utils.file_manager import DocumentationManager
 import re
+import time
 
 
 class RAGServices:
@@ -29,10 +31,11 @@ class RAGServices:
         self.llm = GeminiClient(project_id)
         self.search = VectorSearch(project_id, bucket_processed)
         self.project_id = project_id
+        self.bucket_name = bucket_processed
         
         # GitHub integration
         self.enable_github = enable_github
-        self.github_client = None
+        self.github_client = None  # Set externally with user's token
         
         # Local file management
         self.enable_local_save = enable_local_save
@@ -67,7 +70,8 @@ class RAGServices:
         if not chunks:
             return {
                 'answer': "I couldn't find relevant information in the codebase.",
-                'sources': []
+                'sources': [],
+                'chunks_used': 0
             }
         
         system_prompt = """You are an expert code assistant. Answer the user's question based ONLY on the provided code context.
@@ -85,7 +89,8 @@ Instructions:
             {
                 'file': c['file_path'],
                 'lines': f"{c['start_line']}-{c['end_line']}",
-                'type': c['chunk_type']
+                'type': c['chunk_type'],
+                'similarity': c.get('similarity_score', 0)
             }
             for c in chunks[:5]
         ]
@@ -105,7 +110,7 @@ Instructions:
                 question, chunks, system_prompt, temperature=0.2, max_tokens=4096
             )
             
-            print(f"\n✓ Answer generated with {len(sources)} sources")
+            print(f"✓ Answer generated with {len(sources)} sources")
             
             return {
                 'answer': answer,
@@ -145,7 +150,11 @@ Instructions:
         chunks = self.search.search(query, repo_path, top_k=10)
         
         if not chunks:
-            return {'documentation': "No relevant code found to document."}
+            return {
+                'documentation': "No relevant code found to document.",
+                'type': doc_type,
+                'files_referenced': 0
+            }
         
         # System prompts for different doc types
         prompts = {
@@ -215,7 +224,7 @@ IMPORTANT:
 - Generate the FULL documentation"""
         
         if stream:
-            # Return streaming response (will be saved in CLI after capture)
+            # Return streaming response
             return {
                 'documentation_stream': self.llm.generate_with_context_stream(
                     full_query, chunks, system_prompt, temperature=0.3, max_tokens=8192
@@ -246,17 +255,24 @@ IMPORTANT:
                     docs, target, doc_type, repo_path
                 )
                 result['local_file'] = local_path
+                print(f"✓ Saved locally: {local_path}")
             
             # Push to GitHub
             if push_to_github and self.enable_github and self.github_client:
-                print("\n📤 Pushing to GitHub...")
+                print("\n📤 Pushing documentation to GitHub...")
+                
+                # Clean repo path
+                clean_repo_path = repo_path.replace('repos/', '')
+                
                 github_result = self.github_client.push_documentation(
-                    repo_path, docs, target, doc_type, create_pr=True
+                    clean_repo_path, docs, target, doc_type, create_pr=True
                 )
                 result['github'] = github_result
                 
                 if github_result.get('success'):
                     print(f"✓ GitHub PR created: {github_result.get('pr_url')}")
+                else:
+                    print(f"❌ GitHub push failed: {github_result.get('error')}")
             
             return result
     
@@ -266,7 +282,7 @@ IMPORTANT:
                      repo_path: str, language: str = 'python',
                      stream: bool = False,
                      push_to_github: bool = False,
-                     save_local: bool = True,
+                     save_local: bool = False,
                      target_file: Optional[str] = None) -> Dict:
         """
         Intelligent code completion
@@ -277,9 +293,9 @@ IMPORTANT:
             repo_path: Repository path
             language: Programming language
             stream: Enable streaming
-            push_to_github: Push completed code to GitHub
+            push_to_github: Push completed code to GitHub (requires target_file)
             save_local: Save completed code locally
-            target_file: File being edited (for GitHub push)
+            target_file: File being edited (REQUIRED if push_to_github=True)
             
         Returns:
             Code suggestions with optional save/push
@@ -287,17 +303,28 @@ IMPORTANT:
         print(f"\n{'='*60}")
         print(f"💻 CODE COMPLETION SERVICE {('(Streaming)' if stream else '')}")
         print(f"{'='*60}")
+        print(f"Language: {language}")
+        print(f"Context length: {len(code_context)} chars")
+        print(f"Push to GitHub: {push_to_github}")
+        print(f"Target file: {target_file}")
         
         # Search for similar code patterns
         query = f"{language} code similar to: {code_context[-200:]}"
         chunks = self.search.search(query, repo_path, top_k=5, filter_language=language)
+        
+        # Build context from similar chunks
+        context_parts = []
+        for chunk in chunks:
+            context_parts.append(f"# Similar pattern from {chunk['file_path']}:\n{chunk['content'][:300]}")
+        
+        context = "\n\n".join(context_parts)
         
         system_prompt = f"""You are an expert {language} code completion assistant.
 
 Based on the code context and similar patterns in the codebase, suggest the most likely code completion.
 
 Instructions:
-- Provide ONLY the code completion (no explanations unless asked)
+- Provide ONLY the code completion (no explanations)
 - Match the coding style from the codebase
 - Use appropriate variable names and patterns
 - Include type hints if the codebase uses them
@@ -305,57 +332,81 @@ Instructions:
 - Generate syntactically correct code
 """
         
-        completion_query = f"Complete this {language} code:\n\n{code_context}\n\n# Complete from here:"
+        completion_query = f"""Complete this {language} code:
+```{language}
+{code_context}
+```
+
+Repository patterns:
+{context}
+
+Provide ONLY the code completion (next lines), no explanations.
+"""
         
         if stream:
             return {
                 'completion_stream': self.llm.generate_with_context_stream(
-                    completion_query, chunks, system_prompt, temperature=0.3, max_tokens=2048
+                    completion_query, chunks, system_prompt, temperature=0.3, max_tokens=1024
                 ),
                 'language': language,
                 'streaming': True,
                 'repo_path': repo_path,
-                'target_file': target_file,
-                'code_context': code_context
+                'target_file': target_file
             }
         else:
             completion = self.llm.generate_with_context(
-                completion_query, chunks, system_prompt, temperature=0.3, max_tokens=2048
+                completion_query, chunks, system_prompt, temperature=0.3, max_tokens=1024
             )
             
-            print(f"✓ Completion generated")
+            print(f"✓ Completion generated ({len(completion)} chars)")
             
             # Extract code from response
             code_content = self._extract_code_from_response(completion)
             
-            # Combine with original context
+            # Combine with original context to create full file content
             full_code = code_context + "\n" + code_content
             
             result = {
                 'completion': completion,
                 'language': language,
-                'confidence': 'high' if len(chunks) >= 3 else 'medium'
+                'confidence': 'high' if len(chunks) >= 3 else 'medium',
+                'patterns_found': len(chunks)
             }
             
-            # Save locally if target file is specified
+            # Push to GitHub if requested
+            if push_to_github and self.enable_github and self.github_client:
+                if not target_file:
+                    result['github_error'] = "target_file is required when push_to_github=true"
+                    print("❌ Cannot push to GitHub: target_file not specified")
+                else:
+                    print(f"\n📤 Pushing code completion to GitHub...")
+                    print(f"   File: {target_file}")
+                    
+                    # Clean repo path
+                    clean_repo_path = repo_path.replace('repos/', '')
+                    
+                    github_result = self.github_client.create_branch_and_push_code(
+                        repo_path=clean_repo_path,
+                        file_path=target_file,
+                        new_content=full_code,
+                        instruction=f"AI code completion: {code_context[:60]}..."
+                    )
+                    result['github'] = github_result
+                    
+                    if github_result.get('success'):
+                        print(f"✓ Branch created: {github_result['branch']}")
+                        if github_result.get('pr_url'):
+                            print(f"✓ Pull request: {github_result['pr_url']}")
+                    else:
+                        print(f"❌ GitHub push failed: {github_result.get('error')}")
+            
+            # Save locally
             if save_local and self.enable_local_save and target_file:
                 local_path = self.doc_manager.save_edited_code(
                     full_code, target_file, repo_path, "code completion"
                 )
                 result['local_file'] = local_path
-            
-            # Push to GitHub if target file is specified
-            if push_to_github and self.enable_github and self.github_client and target_file:
-                print("\n📤 Pushing to GitHub...")
-                github_result = self.github_client.create_branch_and_push_code(
-                    repo_path, target_file, full_code, "AI code completion"
-                )
-                result['github'] = github_result
-                
-                if github_result.get('success'):
-                    print(f"✓ Branch created: {github_result['branch']}")
-                    if github_result.get('pr_url'):
-                        print(f"✓ Pull request: {github_result['pr_url']}")
+                print(f"✓ Saved locally: {local_path}")
             
             return result
     
@@ -366,14 +417,14 @@ Instructions:
                   push_to_github: bool = False,
                   save_local: bool = True) -> Dict:
         """
-        Edit existing code based on instructions
+        Edit existing code based on natural language instructions
         
         Args:
-            instruction: What to change
+            instruction: What to change (natural language)
             target_file: File to edit
             repo_path: Repository path
             stream: Enable streaming
-            push_to_github: Push changes to GitHub
+            push_to_github: Create PR with changes
             save_local: Save edited code locally
             
         Returns:
@@ -384,6 +435,7 @@ Instructions:
         print(f"{'='*60}")
         print(f"Instruction: {instruction}")
         print(f"Target: {target_file}")
+        print(f"Push to GitHub: {push_to_github}")
         
         # Search for the target file
         query = f"{target_file} {instruction}"
@@ -395,12 +447,18 @@ Instructions:
         if not target_chunks:
             return {
                 'error': f"File {target_file} not found in indexed code",
-                'modified_code': None
+                'modified_code': None,
+                'file': target_file,
+                'instruction': instruction,
+                'chunks_analyzed': 0
             }
         
         # Get surrounding context
         other_chunks = [c for c in chunks if target_file not in c['file_path']][:3]
         all_chunks = target_chunks + other_chunks
+        
+        print(f"✓ Found {len(target_chunks)} chunks from {target_file}")
+        print(f"✓ Added {len(other_chunks)} chunks for context")
         
         system_prompt = """You are an expert code editor.
 
@@ -411,21 +469,21 @@ Modify the code according to the instruction while:
 - Including comments for significant changes
 - Following best practices
 
-Provide:
-1. The complete modified code
-2. A brief explanation of changes
-3. Any breaking changes or considerations
+Provide the complete modified code in a code block.
 
-Format the response as:
+Format:
 ```[language]
-# Modified code here
+# Complete modified code here
 ```
 
-**EXPLANATION:**
-Brief description of what was changed and why
+Then briefly explain what was changed.
 """
         
-        edit_query = f"Edit instruction: {instruction}\n\nModify the code from {target_file} appropriately."
+        edit_query = f"""Edit instruction: {instruction}
+
+Modify the code from {target_file} according to the instruction above.
+Provide the COMPLETE modified file content.
+"""
         
         if stream:
             return {
@@ -442,7 +500,7 @@ Brief description of what was changed and why
                 edit_query, all_chunks, system_prompt, temperature=0.4, max_tokens=6144
             )
             
-            print(f"✓ Code edited")
+            print(f"✓ Code edited ({len(response)} chars)")
             
             # Extract code from response
             code_content = self._extract_code_from_response(response)
@@ -460,27 +518,44 @@ Brief description of what was changed and why
                     code_content, target_file, repo_path, instruction
                 )
                 result['local_file'] = local_path
+                print(f"✓ Saved locally: {local_path}")
             
             # Push to GitHub
             if push_to_github and self.enable_github and self.github_client:
-                print("\n📤 Pushing to GitHub...")
+                print(f"\n📤 Pushing edited code to GitHub...")
+                
+                # Clean repo path (remove 'repos/' prefix if present)
+                clean_repo_path = repo_path.replace('repos/', '')
+                
                 github_result = self.github_client.create_branch_and_push_code(
-                    repo_path, target_file, code_content, instruction
+                    repo_path=clean_repo_path,
+                    file_path=target_file,
+                    new_content=code_content,
+                    instruction=instruction
                 )
                 result['github'] = github_result
                 
                 if github_result.get('success'):
                     print(f"✓ Branch created: {github_result['branch']}")
                     if github_result.get('pr_url'):
-                        print(f"✓ Pull request: {github_result['pr_url']}")
+                        print(f"✓ Pull request created: {github_result['pr_url']}")
+                else:
+                    print(f"❌ GitHub push failed: {github_result.get('error')}")
             
             return result
     
     # ==================== HELPER METHODS ====================
     
     def _extract_code_from_response(self, response: str) -> str:
-        """Extract code content from markdown response"""
-        # Remove markdown code blocks
+        """
+        Extract code content from markdown response
+        
+        Args:
+            response: LLM response that may contain code blocks
+            
+        Returns:
+            Extracted code content
+        """
         # Pattern for ```language ... ```
         pattern = r'```(?:\w+)?\n(.*?)```'
         matches = re.findall(pattern, response, re.DOTALL)
@@ -491,3 +566,22 @@ Brief description of what was changed and why
         else:
             # No code blocks found, return as is
             return response.strip()
+    
+    def _generate_with_llm(self, prompt: str, max_tokens: int = 2048,
+                          temperature: float = 0.3, stream: bool = False):
+        """
+        Helper to generate with LLM directly (without context search)
+        
+        Args:
+            prompt: The prompt to send to LLM
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            stream: Enable streaming
+            
+        Returns:
+            Generated text or stream iterator
+        """
+        if stream:
+            return self.llm.generate_stream(prompt, max_tokens=max_tokens, temperature=temperature)
+        else:
+            return self.llm.generate(prompt, max_tokens=max_tokens, temperature=temperature)
