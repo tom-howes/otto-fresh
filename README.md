@@ -1,413 +1,267 @@
-
 # OTTO
 
-AI-powered project management tool with repository-aware Q&A and automated task generation.
+**An AI-Powered Project Management Solution with RAG**
+
+Otto is an intelligent project management tool for software teams that connects directly to your GitHub repositories. It uses Retrieval-Augmented Generation (RAG) to understand your codebase and provide contextual Q&A, automated documentation generation, intelligent code completion, and AI-powered code editing — all from a single platform.
+
+---
 
 ## Features
 
-- **Q&A Agent**: Ask questions about your codebase and get contextual answers via RAG
-- **Task Generation**: Input product requirements, receive structured Kanban tasks as JSON
-- **GitHub Integration**: Connect repositories, auto-sync on push to main
+### Core RAG Services
+- **Q&A Agent** — Ask natural language questions about your codebase and get accurate, context-aware answers with source references
+- **Documentation Generator** — Auto-generate API docs, user guides, technical docs, and READMEs from your code
+- **Code Completion** — Get intelligent code suggestions based on patterns in your actual codebase
+- **Code Editor** — Modify code with natural language instructions, with automatic PR creation
+
+### Pipeline & Infrastructure
+- **Automated Ingestion** — Connect a GitHub repo and Otto ingests, chunks, and embeds your code automatically
+- **Smart Caching** — Commit tracking ensures re-indexing only happens when new code is pushed
+- **Webhook Auto-Sync** — Push to main and embeddings update automatically in the background
+- **Login Sync** — Missed updates while logged out are detected and synced on next login
+- **Streaming Responses** — Real-time SSE streaming for all RAG services
+- **Multi-User Support** — Shared chunk storage with per-user access tracking and preferences
+
+### GitHub Integration
+- **OAuth Authentication** — Sign in with GitHub, access private repos
+- **GitHub App** — Installation-level access with fine-grained permissions
+- **PR Creation** — Code edits and documentation can be pushed as pull requests directly
+- **Branch Protection** — Webhook only triggers on the tracked branch
+
+---
+
+## Architecture
+```
+┌──────────────┐       ┌──────────────────┐       ┌──────────────────────┐
+│   Frontend   │──────▶│  Backend Service  │──────▶│   Ingest Service     │
+│  (Next.js)   │       │    (FastAPI)      │       │     (FastAPI)        │
+└──────────────┘       └──────────────────┘       └──────────────────────┘
+                              │                           │
+                              │                           │
+                       ┌──────┴──────┐            ┌───────┴────────┐
+                       │  Firebase   │            │  Google Cloud  │
+                       │  Firestore  │            │    Storage     │
+                       │  (Users)    │            │  (Raw + Chunks)│
+                       └─────────────┘            └───────┬────────┘
+                                                          │
+                                                  ┌───────┴────────┐
+                                                  │   Vertex AI    │
+                                                  │  Embeddings +  │
+                                                  │  Gemini LLM    │
+                                                  └────────────────┘
+```
+
+### Service Responsibilities
+
+| Service | Responsibilities |
+|---------|-----------------|
+| **Frontend** | UI, authentication flow, dashboard, chat interface |
+| **Backend** | Auth, user management, access control, user tracking, webhook handling |
+| **Ingest Service** | RAG pipeline (ingest → chunk → embed), Q&A, docs, code completion, code editing, vector search |
+
+### Data Flow
+```
+GitHub Push → Webhook → Backend → Ingest Service → GCS Buckets
+     │                                                   │
+     │                              Ingest: GitHub API → Raw Bucket
+     │                              Chunk:  Tree-sitter → Processed Bucket
+     │                              Embed:  Vertex AI  → Processed Bucket (updated)
+     │
+User Query → Backend (auth) → Ingest Service → Vector Search → Gemini → Response
+```
+
+---
 
 ## Tech Stack
 
 | Layer | Technologies |
-|-------|--------------|
-| Frontend | Next.js 14, React, Tailwind CSS |
-| Backend | FastAPI, Python 3.11 |
-| Database | Firestore, Cloud Storage |
-| ML/AI | Vertex AI (Gemini 1.5 Pro, fine-tuned with LoRA), Vector Search (ScaNN), Embeddings API |
-| Infrastructure | GCP, Cloud Run, Terraform, Cloud Build |
+|-------|-------------|
+| **Frontend** | Next.js 14, React, Tailwind CSS |
+| **Backend** | FastAPI, Python 3.11, Firebase Admin |
+| **Ingest Service** | FastAPI, Tree-sitter, Vertex AI, Gemini |
+| **Database** | Firestore (users), Cloud Storage (code/chunks) |
+| **ML/AI** | Vertex AI Embeddings (text-embedding-004), Gemini 1.5 Flash |
+| **Auth** | GitHub OAuth, GitHub App, JWT sessions |
+| **Infrastructure** | GCP Cloud Run, Artifact Registry, Cloud Build |
+| **Dev Tools** | Docker, gcloud CLI, smee.io (webhook dev) |
+
+---
+
+## Project Structure
+```
+otto/
+├── frontend/                  # Next.js web application
+│   ├── src/
+│   ├── package.json
+│   └── ...
+│
+├── backend/                   # Backend API service
+│   ├── app/
+│   │   ├── main.py           # FastAPI app entry point
+│   │   ├── config.py         # Environment configuration
+│   │   ├── routes/
+│   │   │   ├── auth.py       # GitHub OAuth + session management
+│   │   │   ├── github.py     # GitHub App installation routes
+│   │   │   ├── user.py       # User profile routes
+│   │   │   ├── rag.py        # RAG endpoints (proxies to ingest service)
+│   │   │   └── webhook.py    # GitHub webhook handler
+│   │   ├── clients/
+│   │   │   ├── github.py     # GitHub API client (App + OAuth)
+│   │   │   ├── firebase.py   # Firestore client
+│   │   │   └── ingest_service.py  # HTTP client for ingest service
+│   │   ├── dependencies/
+│   │   │   └── auth.py       # JWT auth dependency
+│   │   ├── models/           # Pydantic models
+│   │   ├── services/         # Business logic
+│   │   ├── types/            # Type definitions
+│   │   └── utils/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── .gcloudignore
+│
+├── ingest-service/            # RAG pipeline service
+│   ├── app/
+│   │   ├── main.py           # FastAPI app entry point
+│   │   └── routes/
+│   │       └── pipeline.py   # Pipeline + RAG endpoints
+│   ├── src/
+│   │   ├── ingestion/
+│   │   │   └── github_ingester.py    # GitHub repo → GCS
+│   │   ├── chunking/
+│   │   │   ├── enhanced_chunker.py   # Semantic code chunking
+│   │   │   ├── embedder.py           # Vertex AI embeddings
+│   │   │   └── chunker.py           # Basic chunker
+│   │   ├── rag/
+│   │   │   ├── rag_services.py       # Q&A, Docs, Completion, Editing
+│   │   │   ├── vector_search.py      # Semantic similarity search
+│   │   │   └── llm_client_gemini_api.py  # Gemini API client
+│   │   ├── github/
+│   │   │   └── github_client.py      # GitHub push/PR operations
+│   │   └── utils/
+│   │       ├── storage_utils.py      # Multi-tenant storage paths
+│   │       ├── commit_tracker.py     # Commit tracking for caching
+│   │       └── file_manager.py       # Local file management
+│   ├── scripts/              # CLI tools for manual pipeline runs
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── .env                      # Shared environment variables
+├── setup-env.sh             # Mac/Linux setup script
+├── setup-env.bat            # Windows setup script
+├── README.md
+└── requirements.txt         # Root-level dependencies
+```
+
+---
 
 ## Prerequisites
 
-- Node.js 18+
-- Python 3.11+
-- Docker
-- GCP account with billing enabled
-- GitHub account
+- **Python** 3.11+
+- **Node.js** 18+ (for frontend)
+- **Docker** (for containerized deployment)
+- **GCP Account** with billing enabled
+- **GitHub Account**
+- **Gemini API Key** — free from [Google AI Studio](https://aistudio.google.com/app/apikey)
+
+---
 
 ## Setup
 
-### 1. Clone and Install
-
+### 1. Clone the Repository
 ```bash
-git clone https://github.com/otto-pm/otto
+git clone https://github.com/otto-pm/otto.git
 cd otto
-
-# Frontend
-cd frontend && npm install
-
-# Backend
-cd ../backend && pip install -r requirements.txt
 ```
 
-### 2. Configure Environment
+### 2. Configure Environment Variables
 
+Create `otto/.env` (shared config):
 ```bash
-# Copy environment templates
-cp frontend/.env.example frontend/.env.local
-cp backend/.env.example backend/.env
+# GCP
+GCP_PROJECT_ID=otto-pm
+GCS_BUCKET_RAW=otto-raw-repos
+GCS_BUCKET_PROCESSED=otto-processed-chunks
+GEMINI_API_KEY=your_gemini_api_key
 
-# Required variables:
-# - GOOGLE_CLOUD_PROJECT
-# - FIREBASE_API_KEY
-# - GITHUB_APP_ID
-# - GITHUB_PRIVATE_KEY
+# GitHub App
+GITHUB_APP_ID=your_app_id
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
+GITHUB_PRIVATE_KEY_PATH=./github-app-private-key.pem
+GITHUB_CALLBACK_URL=http://localhost:8000/auth/github/callback
+
+# Webhook
+GITHUB_WEBHOOK_SECRET=your_webhook_secret
+
+# Services
+INGEST_SERVICE_URL=http://localhost:8081
+FRONTEND_URL=http://localhost:3000
 ```
 
-### 3. Deploy Infrastructure
-
+Create `backend/.env.local` (backend-specific):
 ```bash
-cd infrastructure/terraform
-terraform init
-terraform apply -var-file=environments/staging.tfvars
+FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json
+FIREBASE_PROJECT_ID=otto-pm
+JWT_SECRET_KEY=generate_with_python_secrets_token_urlsafe_32
 ```
 
-### 4. Run Locally
-
+### 3. GCP Setup
 ```bash
-# Terminal 1 - Backend
-cd backend && uvicorn src.main:app --reload
-
-# Terminal 2 - Frontend
-cd frontend && npm run dev
-```
-
-App available at `http://localhost:3000`
-
-## Usage
-
-### Connect a Repository
-1. Sign in with GitHub
-2. Click "Connect Repository"
-3. Select repository and authorize access
-4. Wait for initial indexing to complete
-
-### Q&A Mode
-```
-[QANDA] How does the authentication middleware work?
-```
-
-### Task Generation Mode
-```
-[TASKGEN] Build user login with OAuth support
-```
-
-Returns structured JSON with tasks, acceptance criteria, and estimates.
-
-## Project Structure
-
-```
-otto/
-├── frontend/          # Next.js app
-├── backend/           # FastAPI services
-├── ml/                # Pipelines, fine-tuning, evaluation
-├── infrastructure/    # Terraform, Cloud Build configs
-├── tests/             # Unit and integration tests
-└── docs/              # Documentation
-```
-
-## Development
-
-```bash
-# Run tests
-cd backend && pytest
-cd frontend && npm test
-
-# Build Docker images
-docker build -t otto-backend ./backend
-docker build -t otto-ml ./ml
-```
-
-## Cloud Setup
-
-1. Clone the repo: `git clone https://github.com/otto-pm/otto.git`
-2. Authenticate with GCP: `gcloud auth login`
-3. Set the project: `gcloud config set project otto-pm`
-4. Run the setup script:
-   - **Windows:** `setup-env.bat`
-   - **Mac/Linux:** `chmod +x setup-env.sh && ./setup-env.sh`
-=======
->>>>>>> 155f254 (Squashed 'ingest-service/' content from commit 2198208)
-Otto - AI-Powered Code RAG System
-=================================
-
-**Comprehensive data pipeline for GitHub repository ingestion, intelligent chunking, and RAG-based code assistance.**
-
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/) [![GCP](https://img.shields.io/badge/cloud-GCP-4285F4.svg)](https://cloud.google.com/) [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://claude.ai/chat/LICENSE)
-
-* * * * *
-
-📋 Table of Contents
---------------------
-
--   [Overview](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#overview)
--   [Features](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#features)
--   [Architecture](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#architecture)
--   [Prerequisites](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#prerequisites)
--   [Installation](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#installation)
--   [Configuration](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#configuration)
--   [Usage](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#usage)
-    -   [1\. Repository Ingestion](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#1-repository-ingestion)
-    -   [2\. Code Chunking](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#2-code-chunking)
-    -   [3\. Embedding Generation](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#3-embedding-generation)
-    -   [4\. RAG Services](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#4-rag-services)
--   [Project Structure](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#project-structure)
--   [API Reference](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#api-reference)
--   [Troubleshooting](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#troubleshooting)
--   [Contributing](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#contributing)
--   [License](https://claude.ai/chat/6cca505e-43f0-4430-9c40-6c2e977214f0#license)
-
-* * * * *
-
-🎯 Overview
------------
-
-Otto is an intelligent code analysis system that:
-
-1.  **Ingests** GitHub repositories into Google Cloud Storage
-2.  **Chunks** code semantically with rich context extraction
-3.  **Embeds** chunks using Vertex AI for semantic search
-4.  **Provides** RAG-based services: Q&A, Documentation, Code Completion, and Code Editing
-
-Built for the **Otto Project** - a software engineering project management solution leveraging LLMs and RAG.
-
-* * * * *
-
-✨ Features
-----------
-
-### 🔄 Repository Ingestion
-
--   ✅ GitHub API integration with OAuth support
--   ✅ Automatic file filtering (code files only)
--   ✅ Metadata extraction and storage
--   ✅ Support for multiple programming languages
-
-### 🧩 Intelligent Chunking
-
--   ✅ **Semantic chunking** using tree-sitter for Python, JavaScript, TypeScript, Java, Go
--   ✅ **Context enrichment**: type hints, docstrings, decorators, imports, exceptions
--   ✅ **Large chunks** (150 lines) for better LLM understanding
--   ✅ **Overlap** between chunks for continuity
-
-### 🎯 Vector Embeddings
-
--   ✅ Vertex AI text-embedding-004 model
--   ✅ Batch processing (25 chunks at once)
--   ✅ Efficient retry and error handling
--   ✅ 100% embedding coverage
-
-### 🤖 RAG Services
-
--   ✅ **Q&A**: Answer questions about codebase
--   ✅ **Documentation**: Generate API docs, user guides, technical docs, READMEs
--   ✅ **Code Completion**: Intelligent suggestions based on patterns
--   ✅ **Code Editing**: Modify code with instructions
--   ✅ **Streaming support** for real-time responses
-
-* * * * *
-
-🏗️ Architecture
-----------------
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                   GitHub Repository                      │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     ↓
-┌─────────────────────────────────────────────────────────┐
-│              1. INGESTION (GitHub → GCS)                 │
-│  - Fetch repo via GitHub API                             │
-│  - Filter code files                                     │
-│  - Store in otto-raw-repos bucket                        │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     ↓
-┌─────────────────────────────────────────────────────────┐
-│           2. CHUNKING (Enhanced Context)                 │
-│  - Semantic chunking (tree-sitter)                       │
-│  - Extract: types, docstrings, decorators, imports      │
-│  - Build enriched context for LLMs                       │
-│  - Store in otto-processed-chunks bucket                 │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     ↓
-┌─────────────────────────────────────────────────────────┐
-│        3. EMBEDDING (Vertex AI text-embedding-004)       │
-│  - Batch generation (25 at a time)                       │
-│  - 768-dimensional vectors                               │
-│  - Update chunks with embeddings                         │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     ↓
-┌─────────────────────────────────────────────────────────┐
-│              4. RAG SERVICES (Gemini)                    │
-│  - Vector search (semantic similarity)                   │
-│  - Context retrieval (top-k chunks)                      │
-│  - LLM generation (Gemini 1.5 Flash)                     │
-│  - Q&A | Docs | Completion | Editing                     │
-└─────────────────────────────────────────────────────────┘
-
-```
-
-* * * * *
-
-📋 Prerequisites
-----------------
-
-### Required
-
--   **Python**: 3.11 or higher
--   **GCP Account**: With billing enabled
--   **GitHub Account**: For repository access
--   **Gemini API Key**: Free from [Google AI Studio](https://aistudio.google.com/app/apikey)
-
-### GCP Services Required
-
--   Cloud Storage
--   Vertex AI (for embeddings)
--   IAM & Admin
-
-* * * * *
-
-🚀 Installation
----------------
-
-### 1\. Clone the Repository
-
-```
-git clone https://github.com/Malav2002/ingest_repo.git
-cd ingest_repo
-
-```
-
-### 2\. Set Up Python Environment
-
-```
-# Deactivate conda if active
-conda deactivate
-
-# Create virtual environment
-python3.11 -m venv venv
-
-# Activate virtual environment
-source venv/bin/activate  # Mac/Linux
-# or
-venv\Scripts\activate  # Windows
-
-```
-
-### 3\. Install Dependencies
-
-```
-# Upgrade pip
-pip install --upgrade pip
-
-# Install all requirements
-pip install -r requirements.txt
-
-# Install Gemini API SDK
-pip install google-generativeai
-
-```
-
-### 4\. Install Google Cloud SDK
-
-```
-# Mac
-brew install google-cloud-sdk
-
-# Or download from:
-# https://cloud.google.com/sdk/docs/install
-
-```
-
-### 5\. Authenticate with Google Cloud
-
-```
-# Login to GCP
+# Authenticate
 gcloud auth login
+gcloud config set project otto-pm
 
-# Set up application default credentials
-gcloud auth application-default login
-
-# Set your project
-gcloud config set project YOUR_PROJECT_ID
-
-```
-
-* * * * *
-
-⚙️ Configuration
-----------------
-
-### 1\. GCP Setup
-
-```
-# Set your project ID
-export PROJECT_ID="your-gcp-project-id"
-
-# Enable required APIs
-gcloud services enable\
-  cloudfunctions.googleapis.com\
-  storage.googleapis.com\
-  aiplatform.googleapis.com\
-  compute.googleapis.com
+# Enable APIs
+gcloud services enable \
+  run.googleapis.com \
+  cloudbuild.googleapis.com \
+  artifactregistry.googleapis.com \
+  storage.googleapis.com \
+  aiplatform.googleapis.com
 
 # Create storage buckets
-gsutil mb -p $PROJECT_ID -l us-central1 gs://otto-raw-repos
-gsutil mb -p $PROJECT_ID -l us-central1 gs://otto-processed-chunks
-gsutil mb -p $PROJECT_ID -l us-central1 gs://otto-dataflow-temp
-
+gsutil mb -p otto-pm -l us-central1 gs://otto-raw-repos
+gsutil mb -p otto-pm -l us-central1 gs://otto-processed-chunks
 ```
 
-### 2\. Get API Keys
+### 4. GitHub App Setup
 
-#### GitHub Token
+1. Go to [GitHub Developer Settings](https://github.com/settings/apps) → New GitHub App
+2. Set **Homepage URL**: `http://localhost:8000`
+3. Set **Callback URL**: `http://localhost:8000/auth/github/callback`
+4. Set **Webhook URL**: Your smee.io URL (for development)
+5. Set **Webhook Secret**: Same as `GITHUB_WEBHOOK_SECRET` in `.env`
+6. Enable permissions: Repository contents (read), Pull requests (write), Webhooks
+7. Subscribe to events: Push
+8. Download the private key and save as `backend/github-app-private-key.pem`
 
-1.  Go to: https://github.com/settings/tokens
-2.  Generate new token (classic)
-3.  Select scope: `repo` (full control)
-4.  Copy the token
+### 5. Firebase Setup
 
-#### Gemini API Key
+1. Create a Firebase project at [Firebase Console](https://console.firebase.google.com)
+2. Enable Firestore
+3. Generate a service account key
+4. Save as `backend/firebase-credentials.json`
 
-1.  Go to: https://aistudio.google.com/app/apikey
-2.  Click "Create API Key"
-3.  Copy the key
+---
 
-### 3\. Configure Environment Variables
+## Running Locally
 
-Create a `.env` file in the project root:
-
+### Backend (port 8000)
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
-# .env file
-PROJECT_ID=your-gcp-project-id
-LOCATION=us-central1
-BUCKET_RAW=otto-raw-repos
-BUCKET_PROCESSED=otto-processed-chunks
-BUCKET_TEMP=otto-dataflow-temp
-GITHUB_TOKEN=your_github_token_here
-GEMINI_API_KEY=your_gemini_api_key_here
 
-```
-
-### 4\. Create `.gitignore`
-
-```
-# .gitignore
-credentials.json
-*.json
-.env
-venv/
-__pycache__/
-*.pyc
-.DS_Store
-*.log
-
+### Ingest Service (port 8081)
+```bash
+cd ingest-service
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8081
 ```
 ## Data Version Control (DVC)
 
@@ -440,538 +294,290 @@ git push                              # Push .dvc file to GitHub
 
 ---
 
-* * * * *
-
-📚 Usage
---------
-
-### 1\. Repository Ingestion
-
-Ingest a GitHub repository into Cloud Storage:
-
-```
-# Ingest a public repository
-python scripts/ingest_repo.py owner/repository-name
-
-# Example
-python scripts/ingest_repo.py malav2002/ai-portfolio-analyzer
-
-# Ingest a specific branch
-python scripts/ingest_repo.py owner/repo --branch develop
-
-# View help
-python scripts/ingest_repo.py --help
-
+### Frontend (port 3000)
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
-**Output:**
-
--   Raw files stored in: `gs://otto-raw-repos/owner/repo/`
--   Metadata: `gs://otto-raw-repos/owner/repo/metadata.json`
-
-* * * * *
-
-### 2\. Code Chunking
-
-Process ingested repository into intelligent chunks:
-
-```
-# Basic chunking (enhanced with context)
-python scripts/process_repo.py owner/repository-name
-
-# Example
-python scripts/process_repo.py malav2002/ai-portfolio-analyzer
-
-# Custom chunk size
-python scripts/process_repo.py owner/repo --chunk-size 200 --overlap 15
-
-# Use basic chunker (faster, less context)
-python scripts/process_repo.py owner/repo --basic
-
-# View help
-python scripts/process_repo.py --help
-
+### Webhook Development (smee.io)
+```bash
+npx smee-client -u https://smee.io/YOUR_CHANNEL --target http://localhost:8000/webhook/github
 ```
 
-**What happens:**
+---
 
--   ✅ Semantic chunking with tree-sitter
--   ✅ Context extraction (types, docstrings, imports, decorators)
--   ✅ Enriched content for LLM understanding
--   ✅ Chunks saved to: `gs://otto-processed-chunks/owner/repo/chunks.jsonl`
+## Deployment (GCP Cloud Run)
 
-**Typical output:**
-
-```
-🔧 Processing repository: malav2002/ai-portfolio-analyzer
-📁 Processing 35 files with larger chunk size (150 lines)
-✓ 35/35 files (285 chunks, 7.0 files/sec)
-⚡ Chunking completed in 5.0s
-✅ Created 285 context-rich chunks
-
-```
-
-* * * * *
-
-### 3\. Embedding Generation
-
-Generate embeddings for semantic search:
-
-```
-# Generate embeddings for all chunks
-python scripts/embed_repo.py owner/repository-name
-
-# Example
-python scripts/embed_repo.py malav2002/ai-portfolio-analyzer
-
-# Force re-embed existing embeddings
-python scripts/embed_repo.py owner/repo --force
-
-# Custom batch size
-python scripts/embed_repo.py owner/repo --batch-size 50
-
-# View help
-python scripts/embed_repo.py --help
-
+### Deploy Ingest Service
+```bash
+cd ingest-service
+gcloud run deploy ingest-service \
+  --source . \
+  --region us-east1 \
+  --platform managed \
+  --allow-unauthenticated \
+  --memory 2Gi \
+  --timeout 300 \
+  --set-env-vars "\
+GCP_PROJECT_ID=otto-pm,\
+GCS_BUCKET_RAW=otto-raw-repos,\
+GCS_BUCKET_PROCESSED=otto-processed-chunks,\
+GEMINI_API_KEY=your_key"
 ```
 
-**What happens:**
-
--   ✅ Loads chunks from GCS
--   ✅ Generates embeddings using Vertex AI (text-embedding-004)
--   ✅ Batch processing for efficiency
--   ✅ Updates chunks with 768-dimensional vectors
-
-**Typical output:**
-
-```
-📦 Loaded: 285 chunks
-🎯 Chunks to embed: 285
-🔄 Generating embeddings (batch size: 25)...
-  ✓ 285/285 embeddings (12.5/sec)
-✅ Generated 285 embeddings in 22.8s
-
-```
-
-* * * * *
-
-### 4\. RAG Services
-
-Use the RAG system for code assistance:
-
-#### 4.1. Q&A Service
-
-Answer questions about your codebase:
-
-```
-# Ask a question
-python scripts/rag_cli.py owner/repo\
-  --service qa\
-  --question "How does the OCR service handle errors?"
-
-# With streaming (see response in real-time)
-python scripts/rag_cli.py owner/repo\
-  --service qa\
-  --question "What caching mechanism is used?"\
-  --stream
-
-# Filter by language
-python scripts/rag_cli.py owner/repo\
-  --service qa\
-  --question "How is authentication implemented?"\
-  --language python
-
+### Deploy Backend
+```bash
+cd backend
+gcloud run deploy backend-service \
+  --source . \
+  --region us-east1 \
+  --platform managed \
+  --allow-unauthenticated \
+  --memory 1Gi \
+  --timeout 300 \
+  --set-env-vars "\
+GCP_PROJECT_ID=otto-pm,\
+GCS_BUCKET_RAW=otto-raw-repos,\
+GCS_BUCKET_PROCESSED=otto-processed-chunks,\
+INGEST_SERVICE_URL=https://ingest-service-xxxxx.us-east1.run.app,\
+FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json,\
+FIREBASE_PROJECT_ID=otto-pm,\
+GITHUB_PRIVATE_KEY_PATH=./github-app-private-key.pem,\
+GITHUB_APP_ID=your_app_id,\
+GITHUB_CLIENT_ID=your_client_id,\
+GITHUB_CLIENT_SECRET=your_secret,\
+GITHUB_CALLBACK_URL=https://backend-service-xxxxx.us-east1.run.app/auth/github/callback,\
+JWT_SECRET_KEY=your_jwt_secret,\
+GITHUB_WEBHOOK_SECRET=your_webhook_secret"
 ```
 
-**Example:**
+### Post-Deployment
 
-```
-python scripts/rag_cli.py malav2002/ai-portfolio-analyzer\
-  --service qa\
-  --question "How does the OCR service handle errors?"\
-  --stream
+1. Update GitHub App callback URL to your Cloud Run backend URL
+2. Update GitHub App webhook URL to `https://your-backend-url/webhook/github`
+3. Grant Cloud Run service account access to GCS buckets:
+```bash
+SERVICE_ACCOUNT=YOUR_PROJECT_NUMBER-compute@developer.gserviceaccount.com
 
-```
+gsutil iam ch serviceAccount:$SERVICE_ACCOUNT:roles/storage.objectAdmin gs://otto-raw-repos
+gsutil iam ch serviceAccount:$SERVICE_ACCOUNT:roles/storage.objectAdmin gs://otto-processed-chunks
 
-#### 4.2. Documentation Generation
-
-Generate professional documentation:
-
-```
-# Generate API documentation
-python scripts/rag_cli.py owner/repo\
-  --service doc\
-  --target "portfolio analysis API"\
-  --doc-type api\
-  --stream
-
-# Generate user guide
-python scripts/rag_cli.py owner/repo\
-  --service doc\
-  --target "getting started"\
-  --doc-type user_guide\
-  --stream
-
-# Generate technical documentation
-python scripts/rag_cli.py owner/repo\
-  --service doc\
-  --target "OCR service architecture"\
-  --doc-type technical\
-  --stream
-
-# Generate README
-python scripts/rag_cli.py owner/repo\
-  --service doc\
-  --target "project overview"\
-  --doc-type readme\
-  --stream
-
+gcloud projects add-iam-policy-binding otto-pm \
+  --member="serviceAccount:$SERVICE_ACCOUNT" \
+  --role="roles/aiplatform.user"
 ```
 
-**Documentation types:**
+### Deployed Services
 
--   `api` - API reference with function signatures
--   `user_guide` - Step-by-step user instructions
--   `technical` - Technical architecture and implementation
--   `readme` - Complete README.md
+| Service | URL |
+|---------|-----|
+| Backend | `https://backend-service-484671782718.us-east1.run.app` |
+| Ingest | `https://ingest-service-484671782718.us-east1.run.app` |
 
-#### 4.3. Code Completion
+---
 
-Get intelligent code suggestions:
+## API Reference
 
-```
-# Complete code
-python scripts/rag_cli.py owner/repo\
-  --service complete\
-  --code "async def process_portfolio(image_path: str):"\
-  --language python\
-  --stream
+### Authentication
 
-# Example
-python scripts/rag_cli.py malav2002/ai-portfolio-analyzer\
-  --service complete\
-  --code "def extract_text(image):"\
-  --language python
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/auth/login` | GET | Initiate GitHub OAuth flow |
+| `/auth/github/callback` | GET | OAuth callback handler |
+| `/auth/logout` | POST | Clear session |
 
-```
+### Pipeline
 
-#### 4.4. Code Editing
-
-Modify existing code based on instructions:
-
-```
-# Edit code with instructions
-python scripts/rag_cli.py owner/repo\
-  --service edit\
-  --file "services/ocr_service.py"\
-  --instruction "add retry logic and better error handling"\
-  --stream
-
-# Example
-python scripts/rag_cli.py malav2002/ai-portfolio-analyzer\
-  --service edit\
-  --file "ml-service/src/services/ocr_service.py"\
-  --instruction "add rate limiting"\
-  --stream
-
-```
-
-* * * * *
-
-📁 Project Structure
---------------------
-
-```
-ingest_repo/
-├── src/
-│   ├── ingestion/
-│   │   ├── __init__.py
-│   │   └── github_ingester.py        # GitHub API integration
-│   ├── chunking/
-│   │   ├── __init__.py
-│   │   ├── chunker.py                # Basic chunker
-│   │   ├── enhanced_chunker.py       # Enhanced context extraction
-│   │   └── embedder.py               # Embedding generation
-│   └── rag/
-│       ├── __init__.py
-│       ├── llm_client_gemini_api.py  # Gemini API client
-│       ├── vector_search.py          # Semantic search
-│       └── rag_services.py           # Q&A, Docs, Completion, Editing
-├── scripts/
-│   ├── ingest_repo.py                # CLI: Ingest repository
-│   ├── process_repo.py               # CLI: Chunk repository
-│   ├── embed_repo.py                 # CLI: Generate embeddings
-│   ├── rag_cli.py                    # CLI: RAG services
-│   ├── inspect_chunks.py             # Analyze chunk quality
-│   └── analyze_chunk_quality.py      # Quality metrics
-├── tests/
-│   ├── test_ingestion.py
-│   └── test_chunking.py
-├── requirements.txt                   # Python dependencies
-├── .env                              # Environment variables (don't commit!)
-├── .gitignore
-└── README.md
-
-```
-
-* * * * *
-
-🔧 API Reference
-----------------
-
-### Ingestion
-
-```
-from src.ingestion.github_ingester import GitHubIngester
-
-ingester = GitHubIngester(
-    project_id="your-project-id",
-    bucket_name="otto-raw-repos",
-    github_token="your_token"
-)
-
-metadata = ingester.ingest_repository("owner/repo", branch="main")
-
-```
-
-### Chunking
-
-```
-from src.chunking.enhanced_chunker import EnhancedCodeChunker
-
-chunker = EnhancedCodeChunker(
-    project_id="your-project-id",
-    bucket_raw="otto-raw-repos",
-    bucket_processed="otto-processed-chunks"
-)
-
-chunks = chunker.process_repository("owner/repo")
-
-```
-
-### Embeddings
-
-```
-from src.chunking.embedder import ChunkEmbedder
-
-embedder = ChunkEmbedder(
-    project_id="your-project-id",
-    bucket_processed="otto-processed-chunks"
-)
-
-stats = embedder.embed_repository("owner/repo")
-
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/rag/repos/pipeline` | POST | Run full pipeline (ingest → chunk → embed) |
+| `/rag/repos/ingest` | POST | Ingest repository from GitHub |
+| `/rag/repos/process` | POST | Chunk repository code |
+| `/rag/repos/embed` | POST | Generate embeddings |
 
 ### RAG Services
 
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/rag/ask` | POST | Ask a question about the codebase |
+| `/rag/docs/generate` | POST | Generate documentation |
+| `/rag/code/complete` | POST | Get code completion |
+| `/rag/code/edit` | POST | Edit code with instructions |
+| `/rag/search` | POST | Search code semantically |
+
+### Streaming
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/rag/ask/stream` | POST | Q&A with streaming response |
+| `/rag/docs/generate/stream` | POST | Documentation with streaming |
+| `/rag/code/edit/stream` | POST | Code editing with streaming |
+
+### Repository Management
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/rag/repos/user/history` | GET | User's repo access history |
+| `/rag/repos/user/all` | GET | List all user's GitHub repos |
+| `/rag/repos/{owner}/{repo}/status` | GET | Pipeline status for a repo |
+| `/rag/repos/{owner}/{repo}/commit-history` | GET | Processing history |
+| `/rag/repos/{owner}/{repo}/access` | GET | Check user's repo access |
+| `/rag/repos/indexed` | GET | List all indexed repos |
+
+### Webhooks
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/webhook/github` | POST | GitHub webhook receiver |
+| `/webhook/active-sessions` | GET | View active webhook sessions |
+
+### User Preferences
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/rag/repos/user/preferences` | POST | Save repo preferences |
+| `/rag/repos/{owner}/{repo}/preferences` | GET | Get repo preferences |
+
+### Health & Stats
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/rag/health` | GET | Backend + ingest service health |
+| `/rag/stats` | GET | System statistics |
+
+---
+
+## RAG Pipeline Details
+
+### 1. Ingestion
+
+The ingester connects to GitHub's API, fetches the repository tree, filters for code files, and uploads them to Cloud Storage.
+
+**Supported languages:** Python, JavaScript, TypeScript, Java, Go, Rust, Ruby, PHP, Swift, Kotlin, Scala, SQL, HTML, CSS, YAML, JSON, Markdown
+
+**Excluded paths:** `node_modules`, `venv`, `__pycache__`, `.git`, `dist`, `build`, `coverage`
+
+### 2. Chunking
+
+The enhanced chunker uses tree-sitter for semantic parsing and extracts rich context for each chunk including type hints, docstrings, decorators, imports, and exception handling.
+
+**Default settings:** 150 lines per chunk, 10 lines overlap
+
+### 3. Embedding
+
+Embeddings are generated using Vertex AI's `text-embedding-004` model in batches of 25, producing 768-dimensional vectors stored alongside the chunks.
+
+### 4. Vector Search
+
+Queries are embedded and compared against chunk embeddings using cosine similarity to find the most relevant code sections, which are then passed to Gemini for response generation.
+
+---
+
+## Webhook Flow
 ```
-from src.rag.rag_services import RAGServices
-
-rag = RAGServices(
-    project_id="your-project-id",
-    bucket_processed="otto-processed-chunks"
-)
-
-# Q&A
-result = rag.answer_question("How does X work?", "owner/repo")
-
-# Documentation
-docs = rag.generate_documentation("API", "owner/repo", doc_type="api")
-
-# Code completion
-completion = rag.complete_code("def process_", "", "owner/repo", "python")
-
-# Code editing
-edited = rag.edit_code("add error handling", "file.py", "owner/repo")
-
+Developer pushes to main
+        │
+        ▼
+GitHub sends push event → Backend /webhook/github
+        │
+        ├── Verify HMAC signature
+        ├── Check: Is repo indexed?
+        ├── Check: Is repo owner logged in?
+        ├── Check: Is push to tracked branch?
+        │
+        ▼
+Queue background pipeline
+        │
+        ├── Ingest (fetch new files)
+        ├── Chunk (re-process code)
+        └── Embed (regenerate vectors)
+        │
+        ▼
+RAG is now up-to-date with latest code
 ```
 
-* * * * *
+If the user was logged out during the push, the sync happens automatically on next login.
 
-🐛 Troubleshooting
-------------------
+---
 
-### Common Issues
+## Cost Estimate
 
-#### 1\. **Authentication Errors**
+### Development (Free Tier)
 
-```
-# Re-authenticate
+| Service | Cost |
+|---------|------|
+| Gemini API | Free (15 req/min, 1M tokens/day) |
+| Cloud Storage | ~$0.50/month |
+| Vertex AI Embeddings | ~$0.025 per 1K embeddings |
+| Cloud Run | Free tier covers light usage |
+| **Total** | **~$5-10/month** |
+
+### Production
+
+| Service | Cost |
+|---------|------|
+| Cloud Run (2 services) | ~$10-20/month (scales to zero) |
+| Cloud Storage | ~$1-5/month |
+| Vertex AI | ~$5-15/month |
+| **Total** | **~$20-40/month** |
+
+---
+
+## Troubleshooting
+
+### Authentication Errors
+```bash
 gcloud auth application-default login
-
-# Check credentials
 gcloud auth list
-
 ```
 
-#### 2\. **Bucket Not Found**
-
-```
-# List buckets
-gsutil ls
-
-# Create missing buckets
-gsutil mb gs://otto-raw-repos
-gsutil mb gs://otto-processed-chunks
-
+### Bucket Permission Denied
+```bash
+# Grant access to Cloud Run service account
+gsutil iam ch serviceAccount:YOUR_SA:roles/storage.objectAdmin gs://BUCKET_NAME
 ```
 
-#### 3\. **API Not Enabled**
+### Webhook Not Triggering
 
-```
-# Enable required APIs
-gcloud services enable aiplatform.googleapis.com
-gcloud services enable storage.googleapis.com
+1. Check smee.io page for incoming events
+2. Verify webhook secret matches in GitHub App and `.env`
+3. Ensure the push is to the tracked branch (usually `main`)
+4. Confirm user is logged in (check `/webhook/active-sessions`)
 
-```
+### Ingest Service Unreachable
+```bash
+# Check health
+curl https://ingest-service-xxxxx.us-east1.run.app/health
 
-#### 4\. **Gemini API Key Issues**
-
-```
-# Verify key is set
-echo $GEMINI_API_KEY
-
-# Get new key from: https://aistudio.google.com/app/apikey
-
+# Check logs
+gcloud run services logs read ingest-service --region=us-east1
 ```
 
-#### 5\. **Embedding Timeouts**
-
-```
-# Check network connectivity
-ping us-central1-aiplatform.googleapis.com
-
-# Try different region
-python scripts/embed_repo.py owner/repo --location us-east4
-
+### Cloud Run Build Failures
+```bash
+# Check build logs
+gcloud builds list --region=us-east1
+gcloud builds log BUILD_ID --region=us-east1
 ```
 
-#### 6\. **Module Not Found**
+---
 
-```
-# Reinstall dependencies
-pip install -r requirements.txt
-pip install google-generativeai
+## Contributing
 
-```
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Commit changes: `git commit -m 'Add your feature'`
+4. Push to branch: `git push origin feature/your-feature`
+5. Open a Pull Request
 
-* * * * *
+---
 
-📊 Performance Metrics
-----------------------
+## License
 
-Based on testing with **malav2002/ai-portfolio-analyzer** (35 files):
+MIT License. See [LICENSE](LICENSE) for details.
 
-| Metric | Value |
-| --- | --- |
-| **Ingestion Speed** | ~6 files/sec |
-| **Chunking Speed** | ~7 files/sec |
-| **Total Chunks** | 285 |
-| **Avg Chunk Size** | 2,784 chars |
-| **Embedding Speed** | ~12/sec |
-| **Semantic Coverage** | 95.4% |
-| **Import Context** | 68.4% |
+---
 
-**Quality Scores:**
-
--   ✅ **Documentation Generation**: Excellent (high semantic chunks)
--   ✅ **Code Completion**: Good (70% focused chunks)
--   ✅ **Q&A Search**: Excellent (100% embeddings)
-
-* * * * *
-
-💰 Cost Estimate
-----------------
-
-### Free Tier (Recommended)
-
--   **Gemini API**: FREE (15 req/min, 1M tokens/day)
--   **Cloud Storage**: $0.02/GB/month (~$0.50/month for typical use)
--   **Vertex AI Embeddings**: ~$0.025 per 1K embeddings (~$7 for 285 chunks)
-
-**Total**: ~$8/month for moderate use
-
-### Production Tier
-
--   **Gemini 1.5 Pro**: $1.25 per 1M input tokens
--   Scalable based on usage
-
-* * * * *
-
-🤝 Contributing
----------------
-
-Contributions welcome! Please follow these steps:
-
-1.  Fork the repository
-2.  Create a feature branch: `git checkout -b feature/amazing-feature`
-3.  Commit changes: `git commit -m 'Add amazing feature'`
-4.  Push to branch: `git push origin feature/amazing-feature`
-5.  Open a Pull Request
-
-* * * * *
-
-📝 License
-----------
-
-This project is part of the **Otto** software engineering project management system.
-
-* * * * *
-
-🙏 Acknowledgments
-------------------
-
--   **Google Cloud Platform** for infrastructure
--   **Vertex AI** for embeddings
--   **Gemini** for LLM capabilities
--   **tree-sitter** for semantic parsing
-
-* * * * *
-
-📞 Support
-----------
-
-For issues and questions:
-
--   Open an issue on GitHub
--   Contact: me
-
-* * * * *
-
-🚀 Quick Start Summary
-----------------------
-
-```
-# 1. Setup
-git clone https://github.com/Malav2002/ingest_repo.git
-cd ingest_repo
-python3.11 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-pip install google-generativeai
-
-# 2. Configure
-# Add to .env: PROJECT_ID, GEMINI_API_KEY, GITHUB_TOKEN
-
-# 3. Create GCP resources
-gcloud services enable aiplatform.googleapis.com storage.googleapis.com
-gsutil mb gs://otto-raw-repos
-gsutil mb gs://otto-processed-chunks
-
-# 4. Use the pipeline
-python scripts/ingest_repo.py owner/repo
-python scripts/process_repo.py owner/repo
-python scripts/embed_repo.py owner/repo
-
-# 5. Ask questions!
-python scripts/rag_cli.py owner/repo\
-  --service qa\
-  --question "How does this work?"\
-  --stream
-
-```
-
-* * * * *
-
-**Built with ❤️ for the Otto Project**
+**Built with care for the Otto Project — Northeastern University**
