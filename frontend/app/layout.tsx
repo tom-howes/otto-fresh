@@ -1,10 +1,10 @@
-//import { ClerkProvider } from "@clerk/nextjs/app-beta";
 import { type Metadata } from "next";
 import { siteConfig } from "@/config/site";
 import "@/styles/globals.css";
 import Toaster from "@/components/toast";
 import QueryProvider from "@/utils/provider";
 import { AuthModalProvider } from "@/context/use-auth-modal";
+import { AuthProvider } from "@/context/use-auth-context";
 import { AuthModal } from "@/components/modals/auth";
 
 export const metadata: Metadata = {
@@ -20,16 +20,15 @@ export const metadata: Metadata = {
     "Tailwind CSS",
     "Server Components",
     "Radix UI",
-    "Clerk",
     "TanStack",
   ],
   authors: [
     {
-      name: "Sebastian Fernandez",
-      url: "https://sebastianfdz.com",
+      name: "Otto PM",
+      url: "https://github.com/otto-pm",
     },
   ],
-  creator: "Sebastian Fernandez",
+  creator: "Otto PM",
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -45,7 +44,8 @@ const RootLayout = ({ children }: { children: React.ReactNode }) => {
     <html lang="en">
       <head />
       <body>
-          <QueryProvider>
+        <QueryProvider>
+          <AuthProvider>
             <AuthModalProvider>
               <AuthModal />
               <Toaster
@@ -58,7 +58,8 @@ const RootLayout = ({ children }: { children: React.ReactNode }) => {
               />
               {children}
             </AuthModalProvider>
-          </QueryProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

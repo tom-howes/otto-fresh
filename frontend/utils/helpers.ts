@@ -1,9 +1,4 @@
-import { type IssueCountType } from "./types";
-import { type IssueType } from "@/utils/types";
-import { type clerkClient } from "@clerk/nextjs";
-import { type DefaultUser, type Issue } from "@prisma/client";
-
-type Value<T> = T extends Promise<infer U> ? U : T;
+import { type IssueCountType, type IssueType } from "./types";
 
 export function getBaseUrl() {
   if (typeof window !== "undefined") return ""; // browser should use relative url
@@ -67,17 +62,6 @@ export function isNullish<T>(
   return value == null || value == undefined;
 }
 
-export function filterUserForClient(
-  user: Value<ReturnType<Awaited<typeof clerkClient.users.getUser>>>
-) {
-  return <DefaultUser>{
-    id: user.id,
-    name: `${user.firstName ?? ""} ${user.lastName ?? ""}`,
-    email: user?.emailAddresses[0]?.emailAddress ?? "",
-    avatar: user.imageUrl,
-  };
-}
-
 export function issueNotInSearch({
   issue,
   search,
@@ -89,7 +73,7 @@ export function issueNotInSearch({
     search.length &&
     !(
       issue.name.toLowerCase().includes(search.toLowerCase()) ||
-      issue.assignee?.name.toLowerCase().includes(search.toLowerCase()) ||
+      issue.assignee?.name?.toLowerCase().includes(search.toLowerCase()) ||
       issue.key.toLowerCase().includes(search.toLowerCase())
     )
   );
@@ -163,33 +147,7 @@ export function hexToRgba(hex: string | null, opacity?: number) {
   return `rgba(${r}, ${g}, ${b}, ${opacity ?? 1})`;
 }
 
-export function generateIssuesForClient(
-  issues: Issue[],
-  users: DefaultUser[],
-  activeSprintIds?: string[]
-) {
-  // Maps are used to make lookups faster
-  const userMap = new Map(users.map((user) => [user.id, user]));
-  const parentMap = new Map(issues.map((issue) => [issue.id, issue]));
-
-  const issuesForClient = issues.map((issue) => {
-    const parent = parentMap.get(issue.parentId ?? "") ?? null;
-    const assignee = userMap.get(issue.assigneeId ?? "") ?? null;
-    const reporter = userMap.get(issue.reporterId) ?? null;
-    const children = issues
-      .filter((i) => i.parentId === issue.id)
-      .map((issue) => {
-        const assignee = userMap.get(issue.assigneeId ?? "") ?? null;
-        return Object.assign(issue, { assignee });
-      });
-    const sprintIsActive = activeSprintIds?.includes(issue.sprintId ?? "");
-    return { ...issue, sprintIsActive, parent, assignee, reporter, children };
-  });
-
-  return issuesForClient as IssueType[];
-}
-
-export function calculateInsertPosition(issues: Issue[]) {
+export function calculateInsertPosition(issues: IssueType[]) {
   return Math.max(...issues.map((issue) => issue.sprintPosition), 0) + 1;
 }
 
