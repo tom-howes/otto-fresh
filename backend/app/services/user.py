@@ -1,4 +1,3 @@
-#user.py
 from app.clients.firebase import db
 from app.models import User, UserCreate, UserUpdate
 from app.models import Workspace, WorkspaceId
