@@ -466,9 +466,9 @@ async def generate_documentation(
     )
 
     return GenerateDocsResponse(
-        documentation=result['documentation'],
-        type=result['type'],
-        files_referenced=result['files_referenced'],
+        documentation=result.get('documentation', ''), 
+        type=result.get('type', request.doc_type),
+        files_referenced=result.get('files_referenced', 0),
         github_pr=result.get('github_pr'),
         github_branch=result.get('github_branch'),
         pushed_by=current_user.get('github_username') if request.push_to_github else None

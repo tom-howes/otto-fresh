@@ -2,10 +2,12 @@
 Pipeline routes - Ingest, Chunk, Embed, and full pipeline orchestration
 """
 from fastapi import APIRouter, HTTPException, BackgroundTasks, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, List
 import os
 import json
+import asyncio
 
 from src.ingestion.github_ingester import GitHubIngester
 from src.chunking.enhanced_chunker import EnhancedCodeChunker
@@ -70,7 +72,6 @@ class EmbedResponse(BaseModel):
 
 
 class FullPipelineRequest(BaseModel):
-    """Run the complete pipeline: ingest → chunk → embed"""
     repo_full_name: str
     branch: Optional[str] = None
     github_token: str
@@ -182,14 +183,10 @@ class RepoStatusResponse(BaseModel):
 
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest_repository(request: IngestRequest):
-    """
-    Step 1: Ingest repository from GitHub into GCS.
-    Checks commit tracker for smart caching.
-    """
+    """Step 1: Ingest repository from GitHub into GCS."""
     try:
         repo_path = get_shared_repo_path(request.repo_full_name)
 
-        # Check if update needed
         from github import Github
         gh = Github(request.github_token)
         gh_repo = gh.get_repo(request.repo_full_name)
@@ -210,11 +207,9 @@ async def ingest_repository(request: IngestRequest):
                 was_cached=True
             )
 
-        # Run ingestion
         ingester = GitHubIngester(PROJECT_ID, BUCKET_RAW, request.github_token)
         metadata = ingester.ingest_repository(request.repo_full_name, request.branch)
 
-        # Save commit info
         commit = gh_repo.get_branch(branch).commit
         commit_tracker.save_commit_info(
             request.repo_full_name,
@@ -291,19 +286,12 @@ async def embed_repository(request: EmbedRequest):
 
 @router.post("/run", response_model=FullPipelineResponse)
 async def run_full_pipeline(request: FullPipelineRequest):
-    """
-    Run the complete pipeline: Ingest → Chunk → Embed
-    
-    This is the main endpoint called by:
-    - Backend when user triggers indexing
-    - Webhook handler on push events
-    """
+    """Run the complete pipeline: Ingest → Chunk → Embed"""
     try:
         print(f"\n{'='*60}")
         print(f"🚀 FULL PIPELINE: {request.repo_full_name}")
         print(f"{'='*60}")
 
-        # ---- Step 1: Ingest ----
         print(f"\n📥 Step 1/3: Ingesting...")
         ingest_result = await ingest_repository(IngestRequest(
             repo_full_name=request.repo_full_name,
@@ -312,7 +300,6 @@ async def run_full_pipeline(request: FullPipelineRequest):
         ))
 
         if ingest_result.was_cached:
-            # Check if chunks and embeddings already exist
             repo_path = get_shared_repo_path(request.repo_full_name)
             from google.cloud import storage
             client = storage.Client(project=PROJECT_ID)
@@ -336,7 +323,6 @@ async def run_full_pipeline(request: FullPipelineRequest):
                         message="Repository already fully indexed and up to date"
                     )
 
-        # ---- Step 2: Chunk ----
         print(f"\n🔪 Step 2/3: Chunking...")
         chunk_result = await chunk_repository(ChunkRequest(
             repo_full_name=request.repo_full_name,
@@ -344,7 +330,6 @@ async def run_full_pipeline(request: FullPipelineRequest):
             overlap=request.overlap
         ))
 
-        # ---- Step 3: Embed ----
         print(f"\n🧮 Step 3/3: Embedding...")
         embed_result = await embed_repository(EmbedRequest(
             repo_full_name=request.repo_full_name,
@@ -535,7 +520,8 @@ async def search_code(request: SearchRequest):
                 'language': c['language'],
                 'lines': f"{c['start_line']}-{c['end_line']}",
                 'content': c['content'][:500],
-                'summary': c.get('summary', '')
+                'summary': c.get('summary', ''),
+                'similarity_score': c.get('similarity_score', 0)
             }
             for c in chunks
         ]
@@ -546,6 +532,140 @@ async def search_code(request: SearchRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Search failed: {str(e)}"
+        )
+
+
+# ==================== STREAMING ENDPOINTS ====================
+
+@router.post("/ask/stream")
+async def ask_question_stream(request: AskRequest):
+    """Ask a question with real token-by-token SSE streaming."""
+    try:
+        rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
+                         enable_github=True, enable_local_save=False)
+        rag.github_client = GitHubClient(request.github_token)
+
+        repo_path = get_shared_repo_path(request.repo_full_name)
+
+        # stream=True returns dict with 'answer_stream' generator + 'sources'
+        result = rag.answer_question(
+            question=request.question,
+            repo_path=repo_path,
+            language=request.language,
+            stream=True
+        )
+
+        sources = result.get('sources', [])
+        stream_gen = result.get('answer_stream')
+
+        async def generate():
+            try:
+                if stream_gen is not None:
+                    for token in stream_gen:
+                        if token:
+                            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                            await asyncio.sleep(0)  # yield to event loop between tokens
+                # Emit sources on completion
+                yield f"data: {json.dumps({'type': 'complete', 'sources': sources})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+        return StreamingResponse(generate(), media_type="text/event-stream")
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Streaming Q&A failed: {str(e)}"
+        )
+
+
+@router.post("/docs/generate/stream")
+async def generate_docs_stream(request: GenerateDocsRequest):
+    """Generate documentation with real token-by-token SSE streaming."""
+    try:
+        rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
+                         enable_github=True, enable_local_save=False)
+        rag.github_client = GitHubClient(request.github_token)
+
+        repo_path = get_shared_repo_path(request.repo_full_name)
+
+        # stream=True returns dict with 'documentation_stream' generator
+        result = rag.generate_documentation(
+            target=request.target,
+            repo_path=repo_path,
+            doc_type=request.doc_type,
+            stream=True,
+            push_to_github=request.push_to_github,
+            save_local=False
+        )
+
+        stream_gen = result.get('documentation_stream')
+
+        async def generate():
+            try:
+                if stream_gen is not None:
+                    for token in stream_gen:
+                        if token:
+                            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                            await asyncio.sleep(0)
+                yield f"data: {json.dumps({'type': 'complete', 'sources': []})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+        return StreamingResponse(generate(), media_type="text/event-stream")
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Streaming docs generation failed: {str(e)}"
+        )
+
+
+@router.post("/code/edit/stream")
+async def edit_code_stream(request: CodeEditRequest):
+    """Edit code with real token-by-token SSE streaming."""
+    try:
+        rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
+                         enable_github=True, enable_local_save=False)
+        rag.github_client = GitHubClient(request.github_token)
+
+        repo_path = get_shared_repo_path(request.repo_full_name)
+
+        # stream=True returns dict with 'modified_code_stream' generator
+        result = rag.edit_code(
+            instruction=request.instruction,
+            target_file=request.target_file,
+            repo_path=repo_path,
+            stream=True,
+            push_to_github=request.push_to_github,
+            save_local=False
+        )
+
+        # File not found in indexed code
+        if result.get('error'):
+            async def error_gen():
+                yield f"data: {json.dumps({'type': 'error', 'message': result['error']})}\n\n"
+            return StreamingResponse(error_gen(), media_type="text/event-stream")
+
+        stream_gen = result.get('modified_code_stream')
+
+        async def generate():
+            try:
+                if stream_gen is not None:
+                    for token in stream_gen:
+                        if token:
+                            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                            await asyncio.sleep(0)
+                yield f"data: {json.dumps({'type': 'complete', 'sources': []})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+        return StreamingResponse(generate(), media_type="text/event-stream")
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Streaming code edit failed: {str(e)}"
         )
 
 
@@ -574,7 +694,6 @@ async def get_repo_status(owner: str, repo: str):
     try:
         client = storage.Client(project=PROJECT_ID)
 
-        # Check ingestion
         raw_bucket = client.bucket(BUCKET_RAW)
         metadata_blob = raw_bucket.blob(f"{repo_path}/metadata.json")
 
@@ -584,7 +703,6 @@ async def get_repo_status(owner: str, repo: str):
             metadata = json.loads(metadata_blob.download_as_text())
             status_info['total_files'] = metadata.get('total_files', 0)
 
-        # Check chunks
         processed_bucket = client.bucket(BUCKET_PROCESSED)
         chunks_blob = processed_bucket.blob(f"{repo_path}/chunks.jsonl")
 
@@ -601,7 +719,6 @@ async def get_repo_status(owner: str, repo: str):
                 status_info['pipeline_progress'] = 100
                 status_info['ready_for_rag'] = True
 
-        # Commit info
         commit_info = commit_tracker.get_last_commit(repo_full_name)
         if commit_info:
             status_info['commit_info'] = {
