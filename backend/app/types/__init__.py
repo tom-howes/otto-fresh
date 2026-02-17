@@ -1,4 +1,3 @@
-#__init__.py
 from app.types.github import (
   InstallationToken,
   InstallationId,

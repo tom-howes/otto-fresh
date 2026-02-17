@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # OTTO
 
 AI-powered project management tool with repository-aware Q&A and automated task generation.
@@ -409,6 +409,36 @@ __pycache__/
 *.log
 
 ```
+## Data Version Control (DVC)
+
+We use DVC to track large data files and models. Data is stored in Google Cloud Storage.
+
+### First-time setup
+
+```bash
+pip install dvc dvc-gs
+gcloud auth application-default login
+```
+
+### Pull existing data
+
+```bash
+dvc pull
+```
+
+### Track new or updated data
+
+**Important:** Always run `dvc add` before `git add` to avoid committing large files.
+
+```bash
+dvc add data/raw/your-file.csv       # 1. DVC tracks data, creates .dvc file
+git add data/raw/your-file.csv.dvc   # 2. Git tracks the .dvc pointer
+git commit -m "Add/update dataset"
+dvc push                              # Upload data to GCS
+git push                              # Push .dvc file to GitHub
+```
+
+---
 
 * * * * *
 

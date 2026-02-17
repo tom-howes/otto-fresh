@@ -1,6 +1,3 @@
-"""
-Firebase client with better error handling
-"""
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.oauth2 import service_account
