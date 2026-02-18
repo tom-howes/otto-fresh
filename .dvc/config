@@ -1,4 +1,0 @@
-[core]
-    remote = gcs-storage
-['remote "gcs-storage"']
-    url = gs://otto-pm-ml-artifacts
