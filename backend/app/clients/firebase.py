@@ -1,3 +1,4 @@
+# backend/app/clients/firebase.py
 """
 Firebase client with better error handling
 """
@@ -39,3 +40,35 @@ except Exception as e:
     raise
 
 print("✅ Firebase ready\n")
+
+
+# Helper function for cleanup
+async def cleanup_expired_documents(collection_name: str, expiry_field: str = 'expires_at'):
+    """
+    Clean up expired documents from a collection.
+    
+    Args:
+        collection_name: Firestore collection name
+        expiry_field: Field name containing expiry timestamp
+    """
+    from datetime import datetime
+    
+    try:
+        docs = db.collection(collection_name).stream()
+        deleted = 0
+        
+        async for doc in docs:
+            data = doc.to_dict()
+            if expiry_field in data:
+                expires_at = datetime.fromisoformat(data[expiry_field])
+                if datetime.now() > expires_at:
+                    await db.collection(collection_name).document(doc.id).delete()
+                    deleted += 1
+        
+        if deleted > 0:
+            print(f"🧹 Cleaned up {deleted} expired documents from {collection_name}")
+        
+        return deleted
+    except Exception as e:
+        print(f"⚠️  Cleanup failed for {collection_name}: {e}")
+        return 0

@@ -1,3 +1,4 @@
+# ingest-service/Dockerfile
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -13,8 +14,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY app/ ./app/
 
+# Set environment for Vertex AI
 ENV PYTHONPATH=/app
 ENV PORT=8080
+ENV GOOGLE_CLOUD_PROJECT=otto-pm
 
 EXPOSE 8080
 

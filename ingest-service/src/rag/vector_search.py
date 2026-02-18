@@ -1,6 +1,6 @@
 # ingest-service/src/rag/vector_search.py
 """
-Fast vector search using Vertex AI embeddings
+Fast vector search using Vertex AI embeddings with proper authentication
 """
 import json
 import numpy as np
@@ -9,12 +9,13 @@ from typing import List, Dict, Optional
 from google.cloud import storage
 from google.cloud import aiplatform
 from vertexai.language_models import TextEmbeddingModel
+from google.auth import default as get_default_credentials
 
 
 class VectorSearch:
     """Fast semantic search using Vertex AI embeddings"""
     
-    def __init__(self, project_id: str, bucket_name: str, location: str = 'us-central1'):
+    def __init__(self, project_id: str, bucket_name: str,location: str = 'us-east1'):
         self.client = storage.Client(project=project_id)
         self.bucket_name = bucket_name
         self.bucket = self.client.bucket(bucket_name)
@@ -22,28 +23,46 @@ class VectorSearch:
         self.location = location
         self.model = None
         
-        # Initialize Vertex AI
+        # Initialize Vertex AI with proper credentials
         try:
-            aiplatform.init(project=project_id, location=location)
-            print(f"✓ Vertex AI initialized (project: {project_id}, location: {location})")
+            credentials, project = get_default_credentials()
+            
+            aiplatform.init(
+                project=project_id,
+                location=location,
+                credentials=credentials
+            )
+            print(f"✓ Vertex AI initialized for vector search")
+            print(f"  Project: {project_id}")
+            print(f"  Location: {location}")
         except Exception as e:
             print(f"⚠️  Vertex AI init warning: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _get_model(self):
         """Lazy load the embedding model"""
         if self.model is None:
-            self.model = TextEmbeddingModel.from_pretrained("text-embedding-004")
-            print("✓ Loaded text-embedding-004 model")
+            try:
+                self.model = TextEmbeddingModel.from_pretrained("text-embedding-004")
+                print("✓ Loaded text-embedding-004 model for search")
+            except Exception as e:
+                print(f"❌ Failed to load embedding model: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
         return self.model
     
     def _embed_query(self, query: str) -> List[float]:
-        """Generate embedding for search query using Vertex AI (FAST)"""
+        """Generate embedding for search query using Vertex AI"""
         try:
             model = self._get_model()
             embeddings = model.get_embeddings([query])
             return embeddings[0].values
         except Exception as e:
             print(f"❌ Query embedding failed: {e}")
+            import traceback
+            traceback.print_exc()
             raise
     
     def search(self, query: str, repo_path: str, top_k: int = 5, 
@@ -53,15 +72,15 @@ class VectorSearch:
         
         Args:
             query: Search query text
-            repo_path: Path to repository chunks in GCS (e.g., 'repos/owner/repo')
+            repo_path: Path to repository chunks in GCS
             top_k: Number of top results to return
-            filter_language: Optional language filter (e.g., 'python', 'javascript')
+            filter_language: Optional language filter
             
         Returns:
-            List of most relevant chunks with similarity scores, sorted by relevance
+            List of most relevant chunks with similarity scores
         """
         print(f"🔍 Searching in: {repo_path}")
-        print(f"   Query: {query}")
+        print(f"   Query: {query[:60]}...")
         print(f"   Top K: {top_k}")
         
         # Load chunks from GCS
@@ -87,7 +106,7 @@ class VectorSearch:
             print("⚠️  No chunks with embeddings found")
             return []
         
-        # Generate embedding for the query (FAST with Vertex AI)
+        # Generate embedding for the query
         print(f"🔄 Generating query embedding...")
         query_start = time.time()
         try:
@@ -130,36 +149,28 @@ class VectorSearch:
         """
         Calculate cosine similarity between two vectors.
         
-        Cosine similarity ranges from -1 (opposite) to 1 (identical).
-        0 means orthogonal (no similarity).
-        
         Args:
             vec1: First vector
             vec2: Second vector
             
         Returns:
-            Cosine similarity score (float)
+            Cosine similarity score (0-1, higher is more similar)
         """
         v1 = np.array(vec1)
         v2 = np.array(vec2)
         
-        # Calculate dot product
         dot_product = np.dot(v1, v2)
-        
-        # Calculate norms (magnitudes)
         norm1 = np.linalg.norm(v1)
         norm2 = np.linalg.norm(v2)
         
-        # Avoid division by zero
         if norm1 == 0 or norm2 == 0:
             return 0.0
         
-        # Cosine similarity = dot product / (norm1 * norm2)
         return float(dot_product / (norm1 * norm2))
     
     def batch_search(self, queries: List[str], repo_path: str, top_k: int = 5) -> Dict[str, List[Dict]]:
         """
-        Perform multiple searches at once (more efficient for multiple queries).
+        Perform multiple searches at once.
         
         Args:
             queries: List of search queries
@@ -186,7 +197,7 @@ class VectorSearch:
             repo_path: Path to repository chunks
             
         Returns:
-            Dictionary with stats (total chunks, embedded chunks, languages, etc.)
+            Dictionary with stats
         """
         blob = self.bucket.blob(f"{repo_path}/chunks.jsonl")
         if not blob.exists():

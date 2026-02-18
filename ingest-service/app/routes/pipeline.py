@@ -1,5 +1,7 @@
+# ingest-service/app/routes/pipeline.py
 """
 Pipeline routes - Ingest, Chunk, Embed, and full pipeline orchestration
+WITH SMART FILE DETECTION for code completion
 """
 from fastapi import APIRouter, HTTPException, BackgroundTasks, status
 from fastapi.responses import StreamingResponse
@@ -22,8 +24,8 @@ router = APIRouter(prefix="/pipeline", tags=["Pipeline"])
 
 # Configuration
 PROJECT_ID = os.getenv("GCP_PROJECT_ID", "otto-pm")
-BUCKET_RAW = os.getenv("GCS_BUCKET_RAW", "otto-raw-repos")
-BUCKET_PROCESSED = os.getenv("GCS_BUCKET_PROCESSED", "otto-processed-chunks")
+BUCKET_RAW = os.getenv("GCS_BUCKET_RAW", "otto-pm-raw-repos")
+BUCKET_PROCESSED = os.getenv("GCS_BUCKET_PROCESSED", "otto-pm-processed-chunks")
 
 # Initialize shared components
 commit_tracker = CommitTracker(PROJECT_ID, BUCKET_PROCESSED)
@@ -72,6 +74,7 @@ class EmbedResponse(BaseModel):
 
 
 class FullPipelineRequest(BaseModel):
+    """Run the complete pipeline: ingest → chunk → embed"""
     repo_full_name: str
     branch: Optional[str] = None
     github_token: str
@@ -125,7 +128,7 @@ class CodeCompleteRequest(BaseModel):
     repo_full_name: str
     code_context: str
     language: str = "python"
-    target_file: Optional[str] = None
+    target_file: Optional[str] = None  # ✅ Optional - will auto-detect
     github_token: str
     push_to_github: bool = False
 
@@ -134,16 +137,20 @@ class CodeCompleteResponse(BaseModel):
     completion: str
     language: str
     confidence: str
+    detected_file: Optional[str] = None  # ✅ NEW: Shows auto-detected file
+    detection_confidence: Optional[str] = None  # ✅ NEW: Confidence in detection
+    detection_similarity: Optional[float] = None  # ✅ NEW: Similarity score
     github_pr: Optional[str] = None
 
 
 class CodeEditRequest(BaseModel):
     repo_full_name: str
     instruction: str
-    target_file: str
+    target_file: Optional[str] = None  # ✅ NOW OPTIONAL - will auto-detect
     github_token: str
     push_to_github: bool = False
     save_local: bool = False
+
 
 
 class CodeEditResponse(BaseModel):
@@ -151,10 +158,11 @@ class CodeEditResponse(BaseModel):
     file: str
     instruction: str
     chunks_analyzed: int
+    detected_file: Optional[str] = None  # ✅ NEW
+    detection_confidence: Optional[str] = None  # ✅ NEW
     github_pr: Optional[str] = None
     github_branch: Optional[str] = None
-
-
+    
 class SearchRequest(BaseModel):
     repo_full_name: str
     query: str
@@ -183,10 +191,14 @@ class RepoStatusResponse(BaseModel):
 
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest_repository(request: IngestRequest):
-    """Step 1: Ingest repository from GitHub into GCS."""
+    """
+    Step 1: Ingest repository from GitHub into GCS.
+    Checks commit tracker for smart caching.
+    """
     try:
         repo_path = get_shared_repo_path(request.repo_full_name)
 
+        # Check if update needed
         from github import Github
         gh = Github(request.github_token)
         gh_repo = gh.get_repo(request.repo_full_name)
@@ -207,9 +219,11 @@ async def ingest_repository(request: IngestRequest):
                 was_cached=True
             )
 
+        # Run ingestion
         ingester = GitHubIngester(PROJECT_ID, BUCKET_RAW, request.github_token)
         metadata = ingester.ingest_repository(request.repo_full_name, request.branch)
 
+        # Save commit info
         commit = gh_repo.get_branch(branch).commit
         commit_tracker.save_commit_info(
             request.repo_full_name,
@@ -286,12 +300,19 @@ async def embed_repository(request: EmbedRequest):
 
 @router.post("/run", response_model=FullPipelineResponse)
 async def run_full_pipeline(request: FullPipelineRequest):
-    """Run the complete pipeline: Ingest → Chunk → Embed"""
+    """
+    Run the complete pipeline: Ingest → Chunk → Embed
+    
+    This is the main endpoint called by:
+    - Backend when user triggers indexing
+    - Webhook handler on push events
+    """
     try:
         print(f"\n{'='*60}")
         print(f"🚀 FULL PIPELINE: {request.repo_full_name}")
         print(f"{'='*60}")
 
+        # ---- Step 1: Ingest ----
         print(f"\n📥 Step 1/3: Ingesting...")
         ingest_result = await ingest_repository(IngestRequest(
             repo_full_name=request.repo_full_name,
@@ -300,6 +321,7 @@ async def run_full_pipeline(request: FullPipelineRequest):
         ))
 
         if ingest_result.was_cached:
+            # Check if chunks and embeddings already exist
             repo_path = get_shared_repo_path(request.repo_full_name)
             from google.cloud import storage
             client = storage.Client(project=PROJECT_ID)
@@ -323,6 +345,7 @@ async def run_full_pipeline(request: FullPipelineRequest):
                         message="Repository already fully indexed and up to date"
                     )
 
+        # ---- Step 2: Chunk ----
         print(f"\n🔪 Step 2/3: Chunking...")
         chunk_result = await chunk_repository(ChunkRequest(
             repo_full_name=request.repo_full_name,
@@ -330,6 +353,7 @@ async def run_full_pipeline(request: FullPipelineRequest):
             overlap=request.overlap
         ))
 
+        # ---- Step 3: Embed ----
         print(f"\n🧮 Step 3/3: Embedding...")
         embed_result = await embed_repository(EmbedRequest(
             repo_full_name=request.repo_full_name,
@@ -425,7 +449,12 @@ async def generate_docs(request: GenerateDocsRequest):
 
 @router.post("/code/complete", response_model=CodeCompleteResponse)
 async def complete_code(request: CodeCompleteRequest):
-    """Get intelligent code completion."""
+    """
+    Get intelligent code completion with AUTOMATIC file detection.
+    
+    If target_file is not provided and push_to_github=True,
+    Otto will automatically detect the most relevant file using semantic search.
+    """
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
                          enable_github=True, enable_local_save=False)
@@ -440,16 +469,28 @@ async def complete_code(request: CodeCompleteRequest):
             stream=False,
             push_to_github=request.push_to_github,
             save_local=False,
-            target_file=request.target_file
+            target_file=request.target_file  # ✅ Can be None - will auto-detect
         )
+
+        # Check if there was an error (e.g., auto-detection failed)
+        if result.get('error'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result['error']
+            )
 
         return CodeCompleteResponse(
             completion=result['completion'],
             language=result['language'],
             confidence=result['confidence'],
+            detected_file=result.get('detected_file'),  # ✅ Show auto-detected file
+            detection_confidence=result.get('detection_confidence'),  # ✅ Detection confidence
+            detection_similarity=result.get('detection_similarity'),  # ✅ Similarity score
             github_pr=result.get('github', {}).get('pr_url')
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -539,7 +580,7 @@ async def search_code(request: SearchRequest):
 
 @router.post("/ask/stream")
 async def ask_question_stream(request: AskRequest):
-    """Ask a question with real token-by-token SSE streaming."""
+    """Ask a question with real-time token-by-token SSE streaming."""
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
                          enable_github=True, enable_local_save=False)
@@ -564,7 +605,7 @@ async def ask_question_stream(request: AskRequest):
                     for token in stream_gen:
                         if token:
                             yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-                            await asyncio.sleep(0)  # yield to event loop between tokens
+                            await asyncio.sleep(0)  # Yield to event loop
                 # Emit sources on completion
                 yield f"data: {json.dumps({'type': 'complete', 'sources': sources})}\n\n"
             except Exception as e:
@@ -581,7 +622,7 @@ async def ask_question_stream(request: AskRequest):
 
 @router.post("/docs/generate/stream")
 async def generate_docs_stream(request: GenerateDocsRequest):
-    """Generate documentation with real token-by-token SSE streaming."""
+    """Generate documentation with real-time token-by-token SSE streaming."""
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
                          enable_github=True, enable_local_save=False)
@@ -608,7 +649,7 @@ async def generate_docs_stream(request: GenerateDocsRequest):
                         if token:
                             yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
                             await asyncio.sleep(0)
-                yield f"data: {json.dumps({'type': 'complete', 'sources': []})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
@@ -623,7 +664,7 @@ async def generate_docs_stream(request: GenerateDocsRequest):
 
 @router.post("/code/edit/stream")
 async def edit_code_stream(request: CodeEditRequest):
-    """Edit code with real token-by-token SSE streaming."""
+    """Edit code with real-time token-by-token SSE streaming."""
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
                          enable_github=True, enable_local_save=False)
@@ -656,7 +697,7 @@ async def edit_code_stream(request: CodeEditRequest):
                         if token:
                             yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
                             await asyncio.sleep(0)
-                yield f"data: {json.dumps({'type': 'complete', 'sources': []})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
@@ -694,6 +735,7 @@ async def get_repo_status(owner: str, repo: str):
     try:
         client = storage.Client(project=PROJECT_ID)
 
+        # Check ingestion
         raw_bucket = client.bucket(BUCKET_RAW)
         metadata_blob = raw_bucket.blob(f"{repo_path}/metadata.json")
 
@@ -703,6 +745,7 @@ async def get_repo_status(owner: str, repo: str):
             metadata = json.loads(metadata_blob.download_as_text())
             status_info['total_files'] = metadata.get('total_files', 0)
 
+        # Check chunks
         processed_bucket = client.bucket(BUCKET_PROCESSED)
         chunks_blob = processed_bucket.blob(f"{repo_path}/chunks.jsonl")
 
@@ -719,6 +762,7 @@ async def get_repo_status(owner: str, repo: str):
                 status_info['pipeline_progress'] = 100
                 status_info['ready_for_rag'] = True
 
+        # Commit info
         commit_info = commit_tracker.get_last_commit(repo_full_name)
         if commit_info:
             status_info['commit_info'] = {
