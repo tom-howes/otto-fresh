@@ -1,4 +1,4 @@
-# OTTO
+# OTTO-PM
 
 **An AI-Powered Project Management Solution with RAG**
 
