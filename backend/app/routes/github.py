@@ -14,7 +14,7 @@ async def install_github_app(current_user: User = Depends(get_current_user)) -> 
   Returns:
       Redirect to GitHub App installation page.
   """
-  install_url = "https://github.com/apps/ottopm/installations/new"
+  install_url = "https://github.com/apps/otto-pm/installations/new"
   return RedirectResponse(url=install_url)
 
 @router.get("/repos", status_code=status.HTTP_200_OK)

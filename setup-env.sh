@@ -50,8 +50,23 @@ echo "Creating frontend/.env.local..."
 cat > frontend/.env.local << EOF
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=otto-pm
-NEXT_PUBLIC_FIREBASE_API_KEY=$(gcloud secrets versions access latest --secret=firebase-api-key)
+NEXT_PUBLIC_FIREBASE_API_KEY=${FIREBASE_API_KEY}
 EOF
+
+# Create ingest-service/.env
+echo "Creating ingest-service/.env..."
+cat > ingest-service/.env << EOF
+GCP_PROJECT_ID=otto-pm
+REGION=us-east1
+GCS_BUCKET_RAW=otto-pm-raw-repos
+GCS_BUCKET_PROCESSED=otto-pm-processed-chunks
+GEMINI_API_KEY=${GEMINI_API_KEY}
+EOF
+
+# Download private key
+echo ""
+echo "Downloading GitHub private key..."
+gcloud secrets versions access latest --secret=github-private-key > backend/github-app-private-key.pem
 
 echo ""
 echo "Done! Environment files created:"

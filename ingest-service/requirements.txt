@@ -1,14 +1,21 @@
-# requirements.txt
-google-cloud-storage
+# API Framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+
+# GCP - Vertex AI for FAST batch embeddings
+google-cloud-storage==2.14.0
 google-cloud-aiplatform
-apache-beam[gcp]==2.60.0  
+google-generativeai
+
+# GitHub
+PyGithub==2.1.1
+
+# Code Parsing
 tree-sitter==0.20.4
 tree-sitter-languages==1.10.2
-requests==2.31.0
+
+# Math
+numpy==1.26.0
+
+# Utils
 python-dotenv==1.0.0
-PyGithub==2.1.1
-vertexai
-functions-framework==3.5.0
-google-generativeai
-sentence-transformers
-torch

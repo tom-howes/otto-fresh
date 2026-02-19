@@ -1,17 +1,20 @@
-fastapi
-firebase-admin
-google-auth
-httpx
-pyjwt
-python-dotenv
-google-cloud-storage
-google-cloud-firestore
-PyGithub
-pydantic
-uvicorn
-google-cloud-aiplatform==1.38.0
-google-generativeai==0.4.1
-sentence-transformers
-torch
-tree-sitter==0.20.4
-tree-sitter-languages==1.10.2
+# API Framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+
+# Auth & Security
+PyJWT[crypto]==2.9.0
+google-auth==2.35.0
+
+# Firebase
+firebase-admin==6.5.0
+
+# HTTP Client (for calling ingest-service)
+httpx==0.27.0
+
+# GitHub
+PyGithub==2.1.1
+
+# Utils
+python-dotenv==1.0.0
+pydantic==2.9.0
