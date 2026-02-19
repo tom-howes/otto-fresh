@@ -274,7 +274,7 @@ class CompleteCodeResponse(BaseModel):
 class EditCodeRequest(BaseModel):
     repo_full_name: str
     instruction: str
-    target_file: str
+    target_file: Optional[str] = None 
     push_to_github: bool = False
 
 class EditCodeResponse(BaseModel):

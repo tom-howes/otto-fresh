@@ -16,7 +16,7 @@ class ChunkEmbedder:
     Generate embeddings using Vertex AI - MUCH FASTER with batch support
     """
     
-    def __init__(self, project_id: str, bucket_processed: str, location: str = 'us-central1'):
+    def __init__(self, project_id: str, bucket_processed: str, location: str = 'us-east1'):
         self.project_id = project_id
         self.bucket_processed = bucket_processed
         self.location = location
@@ -54,6 +54,9 @@ class ChunkEmbedder:
             return False
     
     def embed_repository(self, repo_path: str, force_reembed: bool = False) -> Dict:
+
+        
+
         start_time = time.time()
         print(f"\n{'='*60}")
         print(f"🎯 EMBEDDING: {repo_path}")
@@ -63,6 +66,13 @@ class ChunkEmbedder:
         print(f"📦 Loaded: {len(chunks)} chunks")
         
         already_embedded = sum(1 for c in chunks if c.get('embedding'))
+
+        if force_reembed:
+            for chunk in chunks:
+                chunk.pop('embedding', None)
+                chunk.pop('embedding_model', None)
+                chunk.pop('embedding_dim', None)
+            print(f"🔄 Force re-embed: cleared embeddings from {len(chunks)} chunks")
         
         if already_embedded > 0 and not force_reembed:
             print(f"✓ {already_embedded} chunks already have embeddings")
