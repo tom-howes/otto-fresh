@@ -66,7 +66,7 @@ EOF
 # Download private key
 echo ""
 echo "Downloading GitHub private key..."
-gcloud secrets versions access latest --secret=github-private-key > backend/github-app-private-key.pem
+gcloud secrets versions access latest --secret=github-private-key > backend/github-private-key.pem
 
 echo ""
 echo "Done! Environment files created:"
