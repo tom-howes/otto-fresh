@@ -1,5 +1,5 @@
 from app.models.base import BaseModel, datetime
-from app.models import UserId, GitHubRepo
+from app.models.github import UserId, GitHubRepo
 from typing import TypeAlias
 
 WorkspaceId: TypeAlias = str
