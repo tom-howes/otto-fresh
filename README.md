@@ -50,7 +50,7 @@ cp frontend/.env.example frontend/.env.local
 cp backend/.env.example backend/.env
 
 # Required variables:
-# - GOOGLE_CLOUD_PROJECT
+# - GCP_PROJECT_ID
 # - FIREBASE_API_KEY
 # - GITHUB_APP_ID
 # - GITHUB_PRIVATE_KEY
