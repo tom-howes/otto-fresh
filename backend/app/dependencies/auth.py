@@ -2,7 +2,7 @@
 from fastapi import Request, HTTPException, status
 from app.utils.auth import validate_session_token
 from app.models import User
-from app.types import JWT
+from app.models import JWT
 from app.services.user import get_user_by_id
 
 async def get_current_user(request: Request) -> User:

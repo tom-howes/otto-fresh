@@ -12,7 +12,7 @@ from app.clients.github import (
   GitHubAPIError
 )
 from app.models import UserUpdate, UserCreate
-from app.types import UserId, OAuthState, OAuthCode, JWT, InstallationId
+from app.models import UserId, OAuthState, OAuthCode, JWT, InstallationId
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
