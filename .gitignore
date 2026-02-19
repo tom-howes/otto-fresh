@@ -11,3 +11,10 @@ __pycache__/
 *.pyc
 .DS_Store
 *.pem
+
+# Data folders (tracked by DVC)
+/data/raw
+/data/processed
+/models
+frontend/.next/
+frontend/node_modules/
