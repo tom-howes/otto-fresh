@@ -1,7 +1,7 @@
 from app.clients.firebase import db
 from app.models import User, UserCreate, UserUpdate
 from app.models import Workspace, WorkspaceId
-from app.types import UserId, InstallationId
+from app.models import UserId, InstallationId
 from fastapi import HTTPException, status
 from datetime import datetime
 

@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse
 from app.dependencies.auth import get_current_user
 from app.clients.github import get_installation_token, list_installation_repositories, GitHubAPIError
 from app.models import User
-from app.types import GitHubRepo
+from app.models import GitHubRepo
 
 router = APIRouter(prefix="/github", tags=["GitHub"])
   

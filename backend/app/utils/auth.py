@@ -2,7 +2,7 @@
 from app.config import JWT_SECRET_KEY
 import jwt
 import time
-from app.types import SessionPayload, JWT, UserId
+from app.models import SessionPayload, JWT, UserId
 
 def generate_session_token(user_id: UserId) -> JWT:
   """Generate a JWT token for user sessions.

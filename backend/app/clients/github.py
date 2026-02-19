@@ -11,7 +11,7 @@ from app.config import (
   GITHUB_PRIVATE_KEY,
   GITHUB_CALLBACK_URL
 )
-from app.types import (
+from app.models import (
   JWT,
   InstallationToken,
   InstallationId,
