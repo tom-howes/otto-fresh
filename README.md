@@ -187,7 +187,7 @@ GEMINI_API_KEY=your_gemini_api_key
 GITHUB_APP_ID=your_app_id
 GITHUB_CLIENT_ID=your_client_id
 GITHUB_CLIENT_SECRET=your_client_secret
-GITHUB_PRIVATE_KEY_PATH=./github-app-private-key.pem
+GITHUB_PRIVATE_KEY_PATH=./github-private-key.pem
 GITHUB_CALLBACK_URL=http://localhost:8000/auth/github/callback
 
 # Webhook
@@ -263,7 +263,7 @@ git push                              # Push .dvc file to GitHub
 5. Set **Webhook Secret**: Same as `GITHUB_WEBHOOK_SECRET` in `.env`
 6. Enable permissions: Repository contents (read), Pull requests (write), Webhooks
 7. Subscribe to events: Push
-8. Download the private key and save as `backend/github-app-private-key.pem`
+8. Download the private key and save as `backend/github-private-key.pem`
 
 ### 5. Firebase Setup
 
@@ -344,7 +344,7 @@ GCS_BUCKET_PROCESSED=otto-processed-chunks,\
 INGEST_SERVICE_URL=https://ingest-service-xxxxx.us-east1.run.app,\
 FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json,\
 FIREBASE_PROJECT_ID=otto-pm,\
-GITHUB_PRIVATE_KEY_PATH=./github-app-private-key.pem,\
+GITHUB_PRIVATE_KEY_PATH=./github-private-key.pem,\
 GITHUB_APP_ID=your_app_id,\
 GITHUB_CLIENT_ID=your_client_id,\
 GITHUB_CLIENT_SECRET=your_secret,\

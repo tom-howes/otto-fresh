@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
 COPY firebase-credentials.json ./firebase-credentials.json
-COPY github-app-private-key.pem ./github-app-private-key.pem
+COPY github-private-key.pem ./github-private-key.pem
 
 ENV PYTHONPATH=/app
 ENV PORT=8080
