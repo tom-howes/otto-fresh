@@ -15,3 +15,5 @@ __pycache__/
 /data/raw
 /data/processed
 /models
+frontend/.next/
+frontend/node_modules/
