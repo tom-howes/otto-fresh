@@ -276,13 +276,12 @@ async def github_callback(
 
     # Determine redirect URL
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-    
-    if has_installation:
+    redirect_url = f"{frontend_url}/dashboard?token={session_token}"
+
+    if not has_installation:
         # User has GitHub App installed - go to dashboard
-        redirect_url = f"{frontend_url}/dashboard"
-    else:
         # User needs to install GitHub App
-        redirect_url = f"{frontend_url}/install"
+        redirect_url = f"{frontend_url}/install?token={session_token}"
 
     print(f"\n📝 Step 7: Redirecting to: {redirect_url}")
     print(f"{'='*60}\n")
