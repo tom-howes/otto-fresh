@@ -10,6 +10,7 @@ from app.routes.github import router as github_router
 from app.routes.user import router as user_router
 from app.routes.rag import router as rag_router
 from app.routes.webhook import router as webhook_router
+from app.config import FRONTEND_URL
 
 app = FastAPI(
     title="Otto Backend Service",
@@ -28,33 +29,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routes
-from app.routes.rag import router as rag_router # Add this
-from app.config import FRONTEND_URL 
-
-# Initialize Fast API App
-app = FastAPI()
-
-#CORS Configuration - IMPORTANT for frontend connection
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        FRONTEND_URL,  # http://localhost:3000
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,  # Required for cookies
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Include Routers
 app.include_router(auth_router)
 app.include_router(github_router)
 app.include_router(user_router)
 app.include_router(rag_router)
 app.include_router(webhook_router)
-
 
 # Health check for Cloud Run
 @app.get("/health")
@@ -65,7 +45,6 @@ async def health():
         "service": "backend-service",
         "version": "1.0.0"
     }
-
 
 @app.get("/")
 async def root():
