@@ -1,0 +1,34 @@
+stages:
+  ingest:
+    cmd: python scripts/run_pipeline.py ingest
+    deps:
+      - scripts/run_pipeline.py
+      - ../ingest-service/src/ingestion/github_ingester.py
+    outs:
+      - data/raw/metadata.json
+
+  chunk:
+    cmd: python scripts/run_pipeline.py chunk
+    deps:
+      - scripts/run_pipeline.py
+      - ../ingest-service/src/chunking/enhanced_chunker.py
+      - data/raw/metadata.json
+    outs:
+      - data/processed/chunks.jsonl
+
+  embed:
+    cmd: python scripts/run_pipeline.py embed
+    deps:
+      - scripts/run_pipeline.py
+      - ../ingest-service/src/chunking/embedder.py
+      - data/processed/chunks.jsonl
+    outs:
+      - data/processed/chunks_embedded.jsonl
+
+  validate:
+    cmd: python scripts/run_pipeline.py validate
+    deps:
+      - scripts/run_pipeline.py
+      - data/processed/chunks_embedded.jsonl
+    outs:
+      - data/processed/validation_report.json
