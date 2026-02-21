@@ -5,15 +5,15 @@ from enum import IntEnum
 
 
 class Priority(IntEnum):
-  """Task priority levels.
-  
+  """Issue priority levels.
+
   Integer values allow for easy comparison and sorting.
   Higher values indicate higher priority.
-  
+
   Attributes:
       LOWEST: Minimal priority, can be addressed when time permits.
-      LOW: Lower priority than normal tasks.
-      MEDIUM: Default priority for new tasks.
+      LOW: Lower priority than normal issues.
+      MEDIUM: Default priority for new issues.
       HIGH: Should be addressed soon.
       HIGHEST: Critical priority, requires immediate attention.
   """
