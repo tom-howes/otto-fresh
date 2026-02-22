@@ -12,6 +12,7 @@ from app.routes.github import router as github_router
 from app.routes.user import router as user_router
 from app.routes.rag import router as rag_router
 from app.routes.webhook import router as webhook_router
+from app.config import FRONTEND_URL
 
 app = FastAPI(
     title="Otto Backend Service",
@@ -48,7 +49,6 @@ async def health():
         "service": "backend-service",
         "version": "1.0.0"
     }
-
 
 @app.get("/")
 async def root():
