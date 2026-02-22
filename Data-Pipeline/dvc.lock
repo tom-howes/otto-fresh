@@ -1,0 +1,74 @@
+schema: '2.0'
+stages:
+  ingest:
+    cmd: python scripts/run_pipeline.py ingest
+    deps:
+    - path: ../ingest-service/src/ingestion/github_ingester.py
+      hash: md5
+      md5: 1b986388d31f456e161e730f4d763f89
+      size: 13646
+    - path: scripts/run_pipeline.py
+      hash: md5
+      md5: 09f160b364c3d06f3d9e52a6ace665df
+      size: 4872
+    outs:
+    - path: data/raw/metadata.json
+      hash: md5
+      md5: 9259ee9fd4d3824f533c878ab528554f
+      size: 53106
+  chunk:
+    cmd: python scripts/run_pipeline.py chunk
+    deps:
+    - path: ../ingest-service/src/chunking/enhanced_chunker.py
+      hash: md5
+      md5: 11d119b93067a29914a764aae3843347
+      size: 28322
+    - path: data/raw/metadata.json
+      hash: md5
+      md5: 9259ee9fd4d3824f533c878ab528554f
+      size: 53106
+    - path: scripts/run_pipeline.py
+      hash: md5
+      md5: 09f160b364c3d06f3d9e52a6ace665df
+      size: 4872
+    outs:
+    - path: data/processed/chunks.jsonl
+      hash: md5
+      md5: ac6a0f160418fed430d279fbf987ae50
+      size: 3339820
+  embed:
+    cmd: python scripts/run_pipeline.py embed
+    deps:
+    - path: ../ingest-service/src/chunking/embedder.py
+      hash: md5
+      md5: 332c2f23ac852915fda5bbdd65abd995
+      size: 8036
+    - path: data/processed/chunks.jsonl
+      hash: md5
+      md5: ac6a0f160418fed430d279fbf987ae50
+      size: 3339820
+    - path: scripts/run_pipeline.py
+      hash: md5
+      md5: 09f160b364c3d06f3d9e52a6ace665df
+      size: 4872
+    outs:
+    - path: data/processed/chunks_embedded.jsonl
+      hash: md5
+      md5: d9a43b481774c410b4bf9623bacefd87
+      size: 13876596
+  validate:
+    cmd: python scripts/run_pipeline.py validate
+    deps:
+    - path: data/processed/chunks_embedded.jsonl
+      hash: md5
+      md5: d9a43b481774c410b4bf9623bacefd87
+      size: 13876596
+    - path: scripts/run_pipeline.py
+      hash: md5
+      md5: 09f160b364c3d06f3d9e52a6ace665df
+      size: 4872
+    outs:
+    - path: data/processed/validation_report.json
+      hash: md5
+      md5: a0446d9c247d09e99afc5858d243222e
+      size: 209
