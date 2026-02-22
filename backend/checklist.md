@@ -1,4 +1,4 @@
-# Task Management Backend API Checklist
+# Issue Management Backend API Checklist
 
 ## Phase 1: Project Setup
 
@@ -23,13 +23,13 @@
 - [x] Plan document structure for Users collection
 - [x] Plan document structure for Workspaces collection
 - [x] Plan subcollection structure for Sections (under Workspaces)
-- [x] Plan subcollection structure for Tasks (under Workspaces)
-- [x] Plan subcollection structure for Comments (under Tasks)
+- [x] Plan subcollection structure for Issues (under Workspaces)
+- [x] Plan subcollection structure for Comments (under Issues)
 - [x] Create Pydantic models for each entity:
   - [x] User (create, read, update schemas)
   - [x] Workspace (create, read, update schemas)
   - [x] Section (create, read, update schemas)
-  - [x] Task (create, read, update schemas)
+  - [x] Issue (create, read, update schemas)
   - [x] Comment (create, read, update schemas)
 
 ---
@@ -174,44 +174,44 @@
 
 ---
 
-## Phase 8: Task Service & Endpoints
+## Phase 8: Issue Service & Endpoints
 
-### Task Service
-- [ ] `create_task(workspace_id, data)` - Create task
-- [ ] `get_tasks(workspace_id, filters)` - List tasks with optional filters
-- [ ] `get_task(workspace_id, task_id)` - Get single task
-- [ ] `update_task(workspace_id, task_id, data)` - Update task
-- [ ] `move_task(workspace_id, task_id, section_id, position)` - Move to section
-- [ ] `delete_task(workspace_id, task_id)` - Delete task
-- [ ] `create_task_branch(workspace_id, task_id)` - Create GitHub branch
+### Issue Service
+- [ ] `create_issue(workspace_id, data)` - Create issue
+- [ ] `get_issues(workspace_id, filters)` - List issues with optional filters
+- [ ] `get_issue(workspace_id, issue_id)` - Get single issue
+- [ ] `update_issue(workspace_id, issue_id, data)` - Update issue
+- [ ] `move_issue(workspace_id, issue_id, section_id, position)` - Move to section
+- [ ] `delete_issue(workspace_id, issue_id)` - Delete issue
+- [ ] `create_issue_branch(workspace_id, issue_id)` - Create GitHub branch
 - [ ] `validate_assignee(workspace_id, user_id)` - Check user is member
-- [ ] `generate_branch_name(task)` - Create branch name from task
+- [ ] `generate_branch_name(issue)` - Create branch name from issue
 
-### Task Endpoints
-- [ ] `GET /workspaces/{workspace_id}/tasks` - List tasks
-- [ ] `POST /workspaces/{workspace_id}/tasks` - Create task
-- [ ] `GET /workspaces/{workspace_id}/tasks/{task_id}` - Get task
-- [ ] `PATCH /workspaces/{workspace_id}/tasks/{task_id}` - Update task
-- [ ] `PATCH /workspaces/{workspace_id}/tasks/{task_id}/move` - Move task
-- [ ] `DELETE /workspaces/{workspace_id}/tasks/{task_id}` - Delete task
-- [ ] `POST /workspaces/{workspace_id}/tasks/{task_id}/branch` - Create branch
+### Issue Endpoints
+- [ ] `GET /workspaces/{workspace_id}/issues` - List issues
+- [ ] `POST /workspaces/{workspace_id}/issues` - Create issue
+- [ ] `GET /workspaces/{workspace_id}/issues/{issue_id}` - Get issue
+- [ ] `PATCH /workspaces/{workspace_id}/issues/{issue_id}` - Update issue
+- [ ] `PATCH /workspaces/{workspace_id}/issues/{issue_id}/move` - Move issue
+- [ ] `DELETE /workspaces/{workspace_id}/issues/{issue_id}` - Delete issue
+- [ ] `POST /workspaces/{workspace_id}/issues/{issue_id}/branch` - Create branch
 
 ---
 
 ## Phase 9: Comment Service & Endpoints
 
 ### Comment Service
-- [ ] `create_comment(workspace_id, task_id, user_id, content)` - Add comment
-- [ ] `get_comments(workspace_id, task_id)` - List comments on task
-- [ ] `update_comment(workspace_id, task_id, comment_id, content)` - Edit comment
-- [ ] `delete_comment(workspace_id, task_id, comment_id)` - Delete comment
+- [ ] `create_comment(workspace_id, issue_id, user_id, content)` - Add comment
+- [ ] `get_comments(workspace_id, issue_id)` - List comments on issue
+- [ ] `update_comment(workspace_id, issue_id, comment_id, content)` - Edit comment
+- [ ] `delete_comment(workspace_id, issue_id, comment_id)` - Delete comment
 - [ ] `is_comment_author(comment_id, user_id)` - Verify ownership
 
 ### Comment Endpoints
-- [ ] `GET /workspaces/{workspace_id}/tasks/{task_id}/comments` - List comments
-- [ ] `POST /workspaces/{workspace_id}/tasks/{task_id}/comments` - Add comment
-- [ ] `PATCH /workspaces/{workspace_id}/tasks/{task_id}/comments/{comment_id}` - Edit
-- [ ] `DELETE /workspaces/{workspace_id}/tasks/{task_id}/comments/{comment_id}` - Delete
+- [ ] `GET /workspaces/{workspace_id}/issues/{issue_id}/comments` - List comments
+- [ ] `POST /workspaces/{workspace_id}/issues/{issue_id}/comments` - Add comment
+- [ ] `PATCH /workspaces/{workspace_id}/issues/{issue_id}/comments/{comment_id}` - Edit
+- [ ] `DELETE /workspaces/{workspace_id}/issues/{issue_id}/comments/{comment_id}` - Delete
 
 ---
 
@@ -239,13 +239,13 @@
   - [ ] User service tests
   - [ ] Workspace service tests
   - [ ] Section service tests
-  - [ ] Task service tests
+  - [ ] Issue service tests
   - [ ] Comment service tests
 - [ ] Write integration tests for endpoints
   - [ ] Auth flow tests
   - [ ] Workspace CRUD tests
   - [ ] Section CRUD tests
-  - [ ] Task CRUD tests
+  - [ ] Issue CRUD tests
   - [ ] Comment CRUD tests
 - [ ] Test error cases and edge cases
 
@@ -301,7 +301,7 @@
 - [ ] Add request logging middleware
 - [ ] Implement workspace admin roles
 - [ ] Add join code expiration/regeneration
-- [ ] Add task activity history
+- [ ] Add issue activity history
 - [ ] Add webhook support for GitHub events
-- [ ] Implement soft delete for tasks
+- [ ] Implement soft delete for issues
 - [ ] Add pagination to list endpoints
