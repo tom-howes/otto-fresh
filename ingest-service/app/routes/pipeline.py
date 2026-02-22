@@ -19,6 +19,7 @@ from src.rag.vector_search import VectorSearch
 from src.github.github_client import GitHubClient
 from src.utils.storage_utils import get_shared_repo_path
 from src.utils.commit_tracker import CommitTracker
+from src.validation import SchemaValidator, AnomalyDetector, BiasDetector
 
 router = APIRouter(prefix="/pipeline", tags=["Pipeline"])
 
@@ -162,7 +163,7 @@ class CodeEditResponse(BaseModel):
     detection_confidence: Optional[str] = None  # ✅ NEW
     github_pr: Optional[str] = None
     github_branch: Optional[str] = None
-    
+
 class SearchRequest(BaseModel):
     repo_full_name: str
     query: str
@@ -360,10 +361,30 @@ async def run_full_pipeline(request: FullPipelineRequest):
             force_reembed=request.force_reembed
         ))
 
+        # ---- Step 4: Validate ----
+        print(f"\n🔍 Step 4/4: Validating...")
+        try:
+            from google.cloud import storage
+            client = storage.Client(project=PROJECT_ID)
+            bucket = client.bucket(BUCKET_PROCESSED)
+            repo_path = get_shared_repo_path(request.repo_full_name)
+            content = bucket.blob(f"{repo_path}/chunks.jsonl").download_as_text()
+            chunks = [json.loads(line) for line in content.split('\n') if line.strip()]
+
+            schema_report  = SchemaValidator().validate(chunks)
+            anomaly_report = AnomalyDetector().detect(chunks, request.repo_full_name)
+            bias_report    = BiasDetector().detect(chunks, request.repo_full_name)
+
+            print(f"   Schema:  {'✅ PASS' if schema_report['overall_pass'] else '⚠️ FAIL'}")
+            print(f"   Anomaly: {'✅ PASS' if anomaly_report['passed'] else '⚠️ FAIL'}")
+            print(f"   Bias:    {'✅ None' if not bias_report['bias_detected'] else '⚠️ Detected'}")
+        except Exception as e:
+            print(f"⚠️  Validation skipped: {e}")
+
         print(f"\n{'='*60}")
         print(f"✅ PIPELINE COMPLETE")
-        print(f"   Files: {ingest_result.total_files}")
-        print(f"   Chunks: {chunk_result.total_chunks}")
+        print(f"   Files:    {ingest_result.total_files}")
+        print(f"   Chunks:   {chunk_result.total_chunks}")
         print(f"   Embedded: {embed_result.total_embedded}")
         print(f"{'='*60}\n")
 
