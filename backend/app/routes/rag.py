@@ -3,6 +3,7 @@ RAG Routes - Complete multi-user RAG system
 Backend handles: auth, access control, user tracking, preferences
 Ingest service handles: pipeline, RAG, search (via HTTP)
 """
+from google.cloud import storage
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from app.dependencies.auth import get_current_user
@@ -27,7 +28,6 @@ BUCKET_RAW = os.getenv("GCS_BUCKET_RAW", "otto-raw-repos")
 BUCKET_PROCESSED = os.getenv("GCS_BUCKET_PROCESSED", "otto-processed-chunks")
 
 # User access tracking (backend owns this - tied to auth)
-from google.cloud import storage
 _storage_client = storage.Client(project=PROJECT_ID)
 _processed_bucket = _storage_client.bucket(BUCKET_PROCESSED)
 
@@ -37,17 +37,19 @@ _processed_bucket = _storage_client.bucket(BUCKET_PROCESSED)
 def _get_shared_repo_path(repo_full_name: str) -> str:
     return f"repos/{repo_full_name}"
 
+
 def _get_user_metadata_path(user_id: str, repo_full_name: str) -> str:
     return f"user_data/{user_id}/repos/{repo_full_name}"
 
-def _record_user_access(user_id: str, repo_full_name: str, 
+
+def _record_user_access(user_id: str, repo_full_name: str,
                         access_level: str, permissions: Dict):
     """Record user accessed a repo (stored in GCS)"""
     from datetime import datetime
-    
+
     metadata_path = _get_user_metadata_path(user_id, repo_full_name)
     blob = _processed_bucket.blob(f"{metadata_path}/access_info.json")
-    
+
     access_info = {
         'user_id': user_id,
         'repo': repo_full_name,
@@ -57,16 +59,18 @@ def _record_user_access(user_id: str, repo_full_name: str,
         'last_accessed': datetime.now().isoformat(),
         'access_count': 1
     }
-    
+
     if blob.exists():
         try:
             existing = json.loads(blob.download_as_text())
-            access_info['first_accessed'] = existing.get('first_accessed', access_info['first_accessed'])
+            access_info['first_accessed'] = existing.get(
+                'first_accessed', access_info['first_accessed'])
             access_info['access_count'] = existing.get('access_count', 0) + 1
         except Exception:
             pass
-    
+
     blob.upload_from_string(json.dumps(access_info, indent=2))
+
 
 def _get_access_info(user_id: str, repo_full_name: str) -> Optional[Dict]:
     """Get user's access info for a repo"""
@@ -75,6 +79,7 @@ def _get_access_info(user_id: str, repo_full_name: str) -> Optional[Dict]:
     if blob.exists():
         return json.loads(blob.download_as_text())
     return None
+
 
 def _get_user_repos(user_id: str) -> List[str]:
     """Get all repos a user has accessed"""
@@ -87,7 +92,9 @@ def _get_user_repos(user_id: str) -> List[str]:
             repos.add(f"{parts[3]}/{parts[4]}")
     return sorted(list(repos))
 
-def _save_user_preferences(user_id: str, repo_full_name: str, preferences: Dict):
+
+def _save_user_preferences(
+        user_id: str, repo_full_name: str, preferences: Dict):
     """Save user preferences for a repo"""
     from datetime import datetime
     metadata_path = _get_user_metadata_path(user_id, repo_full_name)
@@ -101,6 +108,7 @@ def _save_user_preferences(user_id: str, repo_full_name: str, preferences: Dict)
         'updated_at': datetime.now().isoformat()
     }
     blob.upload_from_string(json.dumps(pref_data, indent=2))
+
 
 def _get_user_preferences(user_id: str, repo_full_name: str) -> Dict:
     """Get user preferences for a repo"""
@@ -116,6 +124,7 @@ def _get_user_preferences(user_id: str, repo_full_name: str) -> Dict:
         'notifications': True
     }
 
+
 def _get_commit_info(repo_full_name: str) -> Optional[Dict]:
     """Get last commit info from GCS"""
     repo_path = _get_shared_repo_path(repo_full_name)
@@ -126,6 +135,7 @@ def _get_commit_info(repo_full_name: str) -> Optional[Dict]:
         except Exception:
             return None
     return None
+
 
 def _get_commit_history(repo_full_name: str, limit: int = 10) -> List[Dict]:
     """Get commit processing history"""
@@ -153,6 +163,7 @@ def get_user_github_token(user: User) -> str:
             detail="GitHub access token not found. Please re-authenticate."
         )
     return github_token
+
 
 def verify_user_repo_access(user: User, repo_full_name: str) -> Dict:
     try:
@@ -185,6 +196,7 @@ class IngestRepoRequest(BaseModel):
     repo_full_name: str
     branch: Optional[str] = None
 
+
 class IngestRepoResponse(BaseModel):
     success: bool
     repo: str
@@ -194,10 +206,12 @@ class IngestRepoResponse(BaseModel):
     was_cached: bool
     commit_sha: Optional[str] = None
 
+
 class ProcessRepoRequest(BaseModel):
     repo_full_name: str
     chunk_size: int = 150
     overlap: int = 10
+
 
 class ProcessRepoResponse(BaseModel):
     success: bool
@@ -205,9 +219,11 @@ class ProcessRepoResponse(BaseModel):
     total_chunks: int
     message: str
 
+
 class EmbedRepoRequest(BaseModel):
     repo_full_name: str
     force_reembed: bool = False
+
 
 class EmbedRepoResponse(BaseModel):
     success: bool
@@ -215,12 +231,14 @@ class EmbedRepoResponse(BaseModel):
     total_embedded: int
     message: str
 
+
 class FullPipelineRequest(BaseModel):
     repo_full_name: str
     branch: Optional[str] = None
     chunk_size: int = 150
     overlap: int = 10
     force_reembed: bool = False
+
 
 class FullPipelineResponse(BaseModel):
     success: bool
@@ -233,21 +251,25 @@ class FullPipelineResponse(BaseModel):
     message: str
     user: str
 
+
 class AskQuestionRequest(BaseModel):
     repo_full_name: str
     question: str
     language: Optional[str] = None
+
 
 class AskQuestionResponse(BaseModel):
     answer: str
     sources: List[Dict]
     chunks_used: int
 
+
 class GenerateDocsRequest(BaseModel):
     repo_full_name: str
     target: str
     doc_type: str = "api"
     push_to_github: bool = False
+
 
 class GenerateDocsResponse(BaseModel):
     documentation: str
@@ -257,12 +279,14 @@ class GenerateDocsResponse(BaseModel):
     github_branch: Optional[str] = None
     pushed_by: Optional[str] = None
 
+
 class CompleteCodeRequest(BaseModel):
     repo_full_name: str
     code_context: str
     language: str = "python"
     target_file: Optional[str] = None
     push_to_github: bool = False
+
 
 class CompleteCodeResponse(BaseModel):
     completion: str
@@ -271,11 +295,13 @@ class CompleteCodeResponse(BaseModel):
     github_pr: Optional[str] = None
     pushed_by: Optional[str] = None
 
+
 class EditCodeRequest(BaseModel):
     repo_full_name: str
     instruction: str
-    target_file: Optional[str] = None 
+    target_file: Optional[str] = None
     push_to_github: bool = False
+
 
 class EditCodeResponse(BaseModel):
     modified_code: str
@@ -286,15 +312,18 @@ class EditCodeResponse(BaseModel):
     github_branch: Optional[str] = None
     pushed_by: Optional[str] = None
 
+
 class SearchCodeRequest(BaseModel):
     repo_full_name: str
     query: str
     language: Optional[str] = None
     top_k: int = 10
 
+
 class SearchCodeResponse(BaseModel):
     results: List[Dict]
     total_found: int
+
 
 class UserPreferencesRequest(BaseModel):
     repo_full_name: str
@@ -338,7 +367,8 @@ async def run_full_pipeline(
     )
 
 
-@router.post("/repos/ingest", status_code=status.HTTP_202_ACCEPTED, response_model=IngestRepoResponse)
+@router.post("/repos/ingest", status_code=status.HTTP_202_ACCEPTED,
+             response_model=IngestRepoResponse)
 async def ingest_repository(
     request: IngestRepoRequest,
     current_user: User = Depends(get_current_user)
@@ -371,7 +401,8 @@ async def ingest_repository(
     )
 
 
-@router.post("/repos/process", status_code=status.HTTP_202_ACCEPTED, response_model=ProcessRepoResponse)
+@router.post("/repos/process", status_code=status.HTTP_202_ACCEPTED,
+             response_model=ProcessRepoResponse)
 async def process_repository(
     request: ProcessRepoRequest,
     current_user: User = Depends(get_current_user)
@@ -386,7 +417,8 @@ async def process_repository(
     return ProcessRepoResponse(**result)
 
 
-@router.post("/repos/embed", status_code=status.HTTP_202_ACCEPTED, response_model=EmbedRepoResponse)
+@router.post("/repos/embed", status_code=status.HTTP_202_ACCEPTED,
+             response_model=EmbedRepoResponse)
 async def embed_repository(
     request: EmbedRepoRequest,
     current_user: User = Depends(get_current_user)
@@ -466,12 +498,13 @@ async def generate_documentation(
     )
 
     return GenerateDocsResponse(
-        documentation=result.get('documentation', ''), 
+        documentation=result.get('documentation', ''),
         type=result.get('type', request.doc_type),
         files_referenced=result.get('files_referenced', 0),
         github_pr=result.get('github_pr'),
         github_branch=result.get('github_branch'),
-        pushed_by=current_user.get('github_username') if request.push_to_github else None
+        pushed_by=current_user.get(
+            'github_username') if request.push_to_github else None
     )
 
 
@@ -491,7 +524,8 @@ async def complete_code(
             detail="You don't have push access to this repository"
         )
 
-    _record_user_access(user_id, request.repo_full_name, 'read', repo_access['permissions'])
+    _record_user_access(user_id, request.repo_full_name,
+                        'read', repo_access['permissions'])
 
     result = await ingest_client.complete_code(
         repo_full_name=request.repo_full_name,
@@ -507,7 +541,8 @@ async def complete_code(
         language=result['language'],
         confidence=result['confidence'],
         github_pr=result.get('github_pr'),
-        pushed_by=current_user.get('github_username') if request.push_to_github else None
+        pushed_by=current_user.get(
+            'github_username') if request.push_to_github else None
     )
 
 
@@ -548,7 +583,8 @@ async def edit_code(
         chunks_analyzed=result['chunks_analyzed'],
         github_pr=result.get('github_pr'),
         github_branch=result.get('github_branch'),
-        pushed_by=current_user.get('github_username') if request.push_to_github else None
+        pushed_by=current_user.get(
+            'github_username') if request.push_to_github else None
     )
 
 
@@ -561,7 +597,8 @@ async def search_code(
     repo_access = verify_user_repo_access(current_user, request.repo_full_name)
     user_id = current_user.get('id')
 
-    _record_user_access(user_id, request.repo_full_name, 'read', repo_access['permissions'])
+    _record_user_access(user_id, request.repo_full_name,
+                        'read', repo_access['permissions'])
 
     result = await ingest_client.search_code(
         repo_full_name=request.repo_full_name,
@@ -587,7 +624,8 @@ async def ask_question_stream(
     repo_access = verify_user_repo_access(current_user, request.repo_full_name)
     user_id = current_user.get('id')
 
-    _record_user_access(user_id, request.repo_full_name, 'read', repo_access['permissions'])
+    _record_user_access(user_id, request.repo_full_name,
+                        'read', repo_access['permissions'])
 
     import httpx
     from app.clients.ingest_service import INGEST_SERVICE_URL
@@ -625,9 +663,11 @@ async def generate_docs_stream(
     user_id = current_user.get('id')
 
     if request.push_to_github and not repo_access['permissions']['push']:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No push access")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="No push access")
 
-    _record_user_access(user_id, request.repo_full_name, 'read', repo_access['permissions'])
+    _record_user_access(user_id, request.repo_full_name,
+                        'read', repo_access['permissions'])
 
     import httpx
     from app.clients.ingest_service import INGEST_SERVICE_URL
@@ -666,7 +706,8 @@ async def edit_code_stream(
     user_id = current_user.get('id')
 
     if request.push_to_github and not repo_access['permissions']['push']:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No push access")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="No push access")
 
     _record_user_access(
         user_id, request.repo_full_name,
@@ -726,9 +767,11 @@ async def get_user_repo_history(
 
             if indexed:
                 content = chunks_blob.download_as_text()
-                chunks = [json.loads(line) for line in content.split('\n') if line.strip()]
+                chunks = [json.loads(line)
+                          for line in content.split('\n') if line.strip()]
                 chunk_count = len(chunks)
-                has_embeddings = all(c.get('embedding') for c in chunks) if chunks else False
+                has_embeddings = all(c.get('embedding')
+                                     for c in chunks) if chunks else False
 
             commit_info = _get_commit_info(repo)
             preferences = _get_user_preferences(user_id, repo)
@@ -788,9 +831,11 @@ async def list_user_github_repos(
 
             if is_indexed:
                 content = chunks_blob.download_as_text()
-                chunks = [json.loads(line) for line in content.split('\n') if line.strip()]
+                chunks = [json.loads(line)
+                          for line in content.split('\n') if line.strip()]
                 chunk_count = len(chunks)
-                has_embeddings = all(c.get('embedding') for c in chunks) if chunks else False
+                has_embeddings = all(c.get('embedding')
+                                     for c in chunks) if chunks else False
 
             repos.append({
                 'full_name': gh_repo.full_name,
@@ -895,14 +940,19 @@ async def list_indexed_repos(
                     repo_full_name = f"{parts[1]}/{parts[2]}"
                     try:
                         content = blob.download_as_text()
-                        chunk_count = len([l for l in content.split('\n') if l.strip()])
+                        chunk_count = len(
+                            [line for line in content.split('\n') if line.strip()])
                         commit_info = _get_commit_info(repo_full_name)
                         repos.append({
                             'repo': repo_full_name,
                             'total_chunks': chunk_count,
                             'storage_path': f"repos/{repo_full_name}",
-                            'last_commit': commit_info.get('commit_sha', '')[:8] if commit_info else None,
-                            'last_updated': commit_info.get('processed_at') if commit_info else None,
+                            'last_commit': (
+                                commit_info.get('commit_sha', '')[:8] if commit_info else None
+                            ),
+                            'last_updated': (
+                                commit_info.get('processed_at') if commit_info else None
+                            ),
                             'last_author': commit_info.get('author') if commit_info else None
                         })
                     except Exception as e:
@@ -939,7 +989,8 @@ async def save_user_preferences(
         preferences['notifications'] = request.notifications
 
     _save_user_preferences(user_id, request.repo_full_name, preferences)
-    return {'success': True, 'message': 'Preferences saved', 'repo': request.repo_full_name}
+    return {'success': True, 'message': 'Preferences saved',
+            'repo': request.repo_full_name}
 
 
 @router.get("/repos/{owner}/{repo}/preferences")
@@ -993,11 +1044,13 @@ async def get_system_stats(
                     repos_found.add(repo_full_name)
                     try:
                         content = blob.download_as_text()
-                        total_chunks += len([l for l in content.split('\n') if l.strip()])
+                        total_chunks += len([line for line in content.split('\n')
+                                            if line.strip()])
                     except Exception:
                         pass
 
-        user_blobs = _processed_bucket.list_blobs(prefix='user_data/', delimiter='/')
+        user_blobs = _processed_bucket.list_blobs(
+            prefix='user_data/', delimiter='/')
         total_users = sum(1 for _ in user_blobs.prefixes)
 
         return {

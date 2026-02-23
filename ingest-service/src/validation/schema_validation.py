@@ -92,7 +92,8 @@ class SchemaValidator:
             "failed_count": len(wrong_dim)
         }
 
-        passed = sum(1 for e in results["expectations"].values() if e["passed"])
+        passed = sum(
+            1 for e in results["expectations"].values() if e["passed"])
         results["passed"] = passed
         results["failed"] = len(results["expectations"]) - passed
         results["overall_pass"] = results["failed"] == 0
