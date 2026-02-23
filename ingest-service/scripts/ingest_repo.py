@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from src.ingestion.github_ingester import GitHubIngester
+import config
 import os
 import sys
 import argparse
@@ -6,9 +8,6 @@ import argparse
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Load configuration (loads shared .env + local .env.local)
-import config
-
-from src.ingestion.github_ingester import GitHubIngester
 
 
 def main():
@@ -18,15 +17,15 @@ def main():
     parser.add_argument('--project-id', default=config.PROJECT_ID)
     parser.add_argument('--bucket', default=config.BUCKET_RAW)
     parser.add_argument('--token', default=config.GITHUB_TOKEN)
-    
+
     args = parser.parse_args()
-    
+
     if not args.project_id or not args.bucket:
         print("Error: GCP_PROJECT_ID and GCS_BUCKET_RAW must be set in otto/.env")
         sys.exit(1)
-    
+
     ingester = GitHubIngester(args.project_id, args.bucket, args.token)
-    
+
     try:
         metadata = ingester.ingest_repository(args.repo, args.branch)
         print(f"\n✅ Ingestion complete!")
