@@ -145,8 +145,8 @@ async def find_active_user_with_repo_access(
                 # If we can access the repo, this user has permissions
                 permissions = gh_repo.permissions
 
-                # Check if user has at least read access (collaborators have
-                # pull access)
+                # Check if user has at least read access
+                # (collaborators have pull access)
                 if permissions.pull or permissions.push or permissions.admin:
                     print(f"   ✓ {username} has access to {repo_full_name}")
                     print(
@@ -308,7 +308,8 @@ async def github_webhook(request: Request,
     """
     Handle GitHub webhook events.
 
-    Triggers on push if ANY logged-in user (collaborator) has access to the repo.
+    Triggers on push if ANY logged-in user
+    (collaborator) has access to the repo.
     """
     body = await request.body()
     signature = request.headers.get("X-Hub-Signature-256", "")
@@ -352,7 +353,8 @@ async def _handle_push_event(
     """
     Process a push event from GitHub.
 
-    NEW LOGIC: Triggers if ANY active user (collaborator) has access to the repo.
+    NEW LOGIC: Triggers if ANY active user
+    (collaborator) has access to the repo.
     """
     # Extract push info
     ref = payload.get("ref", "")
@@ -493,9 +495,11 @@ async def find_active_user_with_repo_access(
     """
     Find ANY active user who has access to this repository.
 
-    Checks all logged-in users and returns the first one with repo access.
-    This enables team collaboration where any logged-in team member
-    can enable webhooks for the whole team.
+    Checks all logged-in users and returns
+    the first one with repo access.
+    This enables team collaboration where
+    any logged-in team member can enable
+    webhooks for the whole team.
 
     Args:
         repo_full_name: Repository full name (owner/repo)

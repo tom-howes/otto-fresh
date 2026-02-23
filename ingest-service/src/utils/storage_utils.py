@@ -36,7 +36,8 @@ def get_user_metadata_path(user_id: str, repo_full_name: str) -> str:
         user_data/{user_id}/repos/{owner}/{repo}
 
     Example:
-        get_user_metadata_path("123", "otto-pm/otto") → "user_data/123/repos/otto-pm/otto"
+        get_user_metadata_path("123", "otto-pm/otto")
+        → "user_data/123/repos/otto-pm/otto"
     """
     return f"user_data/{user_id}/repos/{repo_full_name}"
 
@@ -49,7 +50,8 @@ def parse_repo_path(path: str) -> dict:
         path: Storage path
 
     Returns:
-        Dict with: user_id, owner, repo, repo_full_name, is_user_specific
+        Dict with: user_id, owner, repo,
+        repo_full_name, is_user_specific
     """
     parts = path.split('/')
 

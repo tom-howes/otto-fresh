@@ -9,7 +9,8 @@ def generate_session_token(user_id: UserId) -> JWT:
     """Generate a JWT token for user sessions.
 
       Args:
-          user_id: The unique identifier for the user to encode in the token.
+          user_id: The unique identifier
+          for the user to encode in the token.
 
       Returns:
           A signed JWT token string valid for 7 days.
@@ -34,7 +35,8 @@ def validate_session_token(token: JWT) -> SessionPayload:
 
       Raises:
           jwt.ExpiredSignatureError: If the token has expired.
-          jwt.InvalidTokenError: If the token is malformed or signature is invalid.
+          jwt.InvalidTokenError: If the token is malformed or
+          the signature is invalid.
       """
     decoded_payload: SessionPayload = jwt.decode(
         token, key=JWT_SECRET_KEY, algorithms=["HS256"])

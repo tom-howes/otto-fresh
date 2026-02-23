@@ -38,7 +38,7 @@ class RAGServices:
         """
         Intelligently detect which file the code context belongs to.
 
-        Uses semantic search to find the most similar code in the repository.
+        Uses semantic search to find the most similar code in the repo.
 
         Args:
             code_context: The code snippet
@@ -46,7 +46,8 @@ class RAGServices:
             language: Programming language
 
         Returns:
-            Dict with file_path, similarity, and metadata, or None if not found
+            Dict with file_path, similarity, and metadata,
+            or None if not found
         """
         print(f"\n🔍 AUTO-DETECTING target file...")
         print(f"   Code context: {code_context[:60]}...")
@@ -88,7 +89,7 @@ class RAGServices:
             'confidence': 'high' if similarity > 0.8 else 'medium'
         }
 
-    # ==================== NEW: SURGICAL EDIT HELPERS ====================
+    # ====== NEW: SURGICAL EDIT HELPERS ======
 
     def _get_existing_file_content(
             self, repo_path: str, file_path: str) -> Optional[str]:
@@ -118,18 +119,21 @@ class RAGServices:
     def _insert_completion_into_file(self, existing_content: str,
                                      code_context: str, completion: str) -> str:
         """
-        Insert completion into the existing file at the correct position.
+        Insert completion into the existing
+        file at the correct position.
 
         Finds where code_context appears in the file and appends
         the completion immediately after it, preserving everything else.
 
         Args:
             existing_content: Full current file content from GitHub
-            code_context: The code snippet the user provided (used to locate insertion point)
+            code_context: The code snippet the user provided
+            (used to locate insertion point)
             completion: The generated completion to insert
 
         Returns:
-            Full file content with completion inserted at the right position
+            Full file content with completion inserted at the right
+            position
         """
         context_stripped = code_context.strip()
 
@@ -338,7 +342,7 @@ Be complete and professional."""
 
             return result
 
-    # ==================== CODE COMPLETION WITH AUTO FILE DETECTION ==========
+    # ====== CODE COMPLETION WITH AUTO FILE DETECTION ======
 
     def complete_code(self, code_context: str, cursor_position: str,
                       repo_path: str, language: str = 'python',
@@ -361,7 +365,8 @@ Be complete and professional."""
             stream: Enable streaming
             push_to_github: Create PR with completed code
             save_local: Save locally
-            target_file: File being edited (auto-detected if not provided)
+            target_file: File being edited
+            (auto-detected if not provided)
         """
         print(f"\n{'=' * 60}")
         print(f"💻 CODE COMPLETION WITH SMART FILE DETECTION")
@@ -428,7 +433,7 @@ Be complete and professional."""
             )
         context = "\n\n".join(context_parts)
 
-        # ===== UPDATED PROMPT: complete only the snippet, not the whole file =
+        # ===== UPDATED PROMPT: complete only the snippet =====
         system_prompt = f"""You are an expert {language} code completion assistant.
 
 Your job is to complete ONLY the provided code snippet — do NOT rewrite the entire file.
@@ -473,7 +478,7 @@ Return ONLY the lines that complete the snippet above. Do not repeat the snippet
             # Extract code from response
             code_content = self._extract_code_from_response(completion)
 
-            # ===== SURGICAL INSERT: fetch real file, insert at correct positio
+            # ===== SURGICAL INSERT: fetch file and insert =====
             full_code = None
             if target_file:
                 existing_content = self._get_existing_file_content(
@@ -571,7 +576,8 @@ Return ONLY the lines that complete the snippet above. Do not repeat the snippet
         Edit existing code based on natural language instructions.
         NOW SUPPORTS AUTO FILE DETECTION!
 
-        If target_file is not provided, Otto will detect it from the instruction.
+        If target_file is not provided,
+        Otto will detect it from the instruction.
 
         Args:
             instruction: What to change (natural language)
@@ -617,7 +623,8 @@ Return ONLY the lines that complete the snippet above. Do not repeat the snippet
         existing_content = self._get_existing_file_content(
             repo_path, target_file)
 
-        # Search for the target file chunks (used as fallback + extra context)
+        # Search for the target file chunks
+        # (used as fallback + extra context)
         query = f"{target_file} {instruction}"
         chunks = self.search.search(query, repo_path, top_k=10)
 
@@ -642,12 +649,12 @@ Return ONLY the lines that complete the snippet above. Do not repeat the snippet
 
         print(f"✓ Found {len(target_chunks)} chunks from {target_file}")
 
-        # Use actual GitHub file if available, otherwise reconstruct from
-        # chunks
+        # Use actual GitHub file if available, otherwise
+        # reconstruct from chunks
         file_content_for_prompt = existing_content if existing_content else \
             "\n\n".join([c['content'] for c in target_chunks])
 
-        # ===== UPDATED PROMPT: surgical edit only, full file returned =====
+        # ===== UPDATED PROMPT: edit only, full file returned =====
         system_prompt = """You are an expert code editor making SURGICAL edits only.
 
 Rules:
@@ -732,8 +739,9 @@ Return the COMPLETE modified file with the minimal diff — touch only what is n
         """
         Extract code content from markdown response.
 
-        Looks for code blocks in markdown format and extracts the content.
-        Falls back to returning the entire response if no code blocks found.
+        Looks for code blocks in markdown format and extracts
+        the content. Falls back to returning the entire response
+        if no code blocks found.
 
         Args:
             response: LLM response that may contain code blocks

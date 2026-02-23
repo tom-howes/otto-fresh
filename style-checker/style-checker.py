@@ -1,3 +1,4 @@
+
 import sys
 import subprocess
 from pathlib import Path
@@ -33,12 +34,16 @@ def check_directory(directory):
     for i in range(0, len(py_files), BATCH_SIZE):
         batch = py_files[i:i + BATCH_SIZE]
         result = subprocess.run(
-            ["pycodestyle", "--max-line-length=99", *[str(f) for f in batch]],
+            ["pycodestyle", "--max-line-length=99",
+             "--max-doc-length=72",
+             *[str(f) for f in batch]],
             capture_output=True, text=True
         )
         for line in result.stdout.strip().splitlines():
             if not line:
                 continue
+            # Default format: /path/to/file.py:10:1:
+            # E302 expected 2 blank lines
             parts = line.split(":", 3)
             if len(parts) >= 4:
                 filepath = parts[0].strip()

@@ -484,7 +484,8 @@ async def complete_code(request: CodeCompleteRequest):
     Get intelligent code completion with AUTOMATIC file detection.
 
     If target_file is not provided and push_to_github=True,
-    Otto will automatically detect the most relevant file using semantic search.
+    Otto will automatically detect the most relevant file
+    using semantic search.
     """
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
@@ -622,7 +623,8 @@ async def ask_question_stream(request: AskRequest):
 
         repo_path = get_shared_repo_path(request.repo_full_name)
 
-        # stream=True returns dict with 'answer_stream' generator + 'sources'
+        # stream=True returns dict with 'answer_stream'
+        # generator + 'sources'
         result = rag.answer_question(
             question=request.question,
             repo_path=repo_path,
@@ -656,7 +658,8 @@ async def ask_question_stream(request: AskRequest):
 
 @router.post("/docs/generate/stream")
 async def generate_docs_stream(request: GenerateDocsRequest):
-    """Generate documentation with real-time token-by-token SSE streaming."""
+    """Generate documentation with real-time
+    token-by-token SSE streaming."""
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
                           enable_github=True, enable_local_save=False)

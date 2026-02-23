@@ -264,7 +264,7 @@ class CodeChunker:
 
     def _build_enriched_content(self, chunk: Dict, file_path: str,
                                 file_context: Dict, repo_context: Dict, language: str) -> str:
-        """Build enriched content with full context for LLM understanding"""
+        """Build content with full context for LLM understanding"""
 
         parts = []
 
