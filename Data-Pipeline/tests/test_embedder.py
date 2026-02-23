@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch, call
 @pytest.fixture
 def embedder():
     with patch("src.chunking.embedder.storage.Client"), \
-         patch("src.chunking.embedder.aiplatform.init"), \
-         patch("src.chunking.embedder.TextEmbeddingModel"):
+            patch("src.chunking.embedder.aiplatform.init"), \
+            patch("src.chunking.embedder.TextEmbeddingModel"):
         from src.chunking.embedder import ChunkEmbedder
         e = ChunkEmbedder(
             project_id="test-project",
@@ -25,8 +25,8 @@ def embedder():
 
 def test_embedder_default_location():
     with patch("src.chunking.embedder.storage.Client"), \
-         patch("src.chunking.embedder.aiplatform.init"), \
-         patch("src.chunking.embedder.TextEmbeddingModel"):
+            patch("src.chunking.embedder.aiplatform.init"), \
+            patch("src.chunking.embedder.TextEmbeddingModel"):
         from src.chunking.embedder import ChunkEmbedder
         e = ChunkEmbedder(project_id="proj", bucket_processed="bucket")
     assert e.location == "us-east1"
@@ -48,14 +48,20 @@ def test_embedder_not_initialized_at_start(embedder):
 
 def test_initialize_model_success(embedder):
     mock_model = MagicMock()
-    with patch("src.chunking.embedder.TextEmbeddingModel.from_pretrained", return_value=mock_model):
+    with patch(
+        "src.chunking.embedder.TextEmbeddingModel.from_pretrained",
+        return_value=mock_model
+    ):
         result = embedder.initialize_model()
     assert result is True
     assert embedder.initialized is True
 
 
 def test_initialize_model_failure(embedder):
-    with patch("src.chunking.embedder.TextEmbeddingModel.from_pretrained", side_effect=Exception("fail")):
+    with patch(
+        "src.chunking.embedder.TextEmbeddingModel.from_pretrained",
+        side_effect=Exception("fail")
+    ):
         result = embedder.initialize_model()
     assert result is False
     assert embedder.initialized is False
@@ -129,7 +135,8 @@ def test_embed_repository_skips_already_embedded(embedder):
 
 def test_embed_repository_force_reembed_clears_embeddings(embedder):
     chunks = [
-        {"content": "def foo(): pass", "embedding": [0.1, 0.2], "embedding_model": "old"},
+        {"content": "def foo(): pass", "embedding": [
+            0.1, 0.2], "embedding_model": "old"},
     ]
     jsonl = "\n".join(json.dumps(c) for c in chunks)
     mock_blob = MagicMock()

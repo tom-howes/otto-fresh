@@ -14,7 +14,7 @@ TIMEOUT = 300.0  # 5 min timeout for pipeline operations
 class IngestServiceClient:
     """
     HTTP client for the ingest-service API.
-    
+
     All RAG pipeline operations go through this client.
     The backend no longer imports from ingest-service directly.
     """
@@ -56,7 +56,8 @@ class IngestServiceClient:
                 return response.json()
             except httpx.HTTPStatusError as e:
                 detail = e.response.json().get("detail", str(e))
-                raise HTTPException(status_code=e.response.status_code, detail=detail)
+                raise HTTPException(
+                    status_code=e.response.status_code, detail=detail)
             except httpx.ConnectError:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -81,7 +82,8 @@ class IngestServiceClient:
                 return response.json()
             except httpx.HTTPStatusError as e:
                 detail = e.response.json().get("detail", str(e))
-                raise HTTPException(status_code=e.response.status_code, detail=detail)
+                raise HTTPException(
+                    status_code=e.response.status_code, detail=detail)
             except httpx.ConnectError:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -106,7 +108,8 @@ class IngestServiceClient:
                 return response.json()
             except httpx.HTTPStatusError as e:
                 detail = e.response.json().get("detail", str(e))
-                raise HTTPException(status_code=e.response.status_code, detail=detail)
+                raise HTTPException(
+                    status_code=e.response.status_code, detail=detail)
             except httpx.ConnectError:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -130,7 +133,8 @@ class IngestServiceClient:
                 return response.json()
             except httpx.HTTPStatusError as e:
                 detail = e.response.json().get("detail", str(e))
-                raise HTTPException(status_code=e.response.status_code, detail=detail)
+                raise HTTPException(
+                    status_code=e.response.status_code, detail=detail)
             except httpx.ConnectError:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -158,7 +162,8 @@ class IngestServiceClient:
                 return response.json()
             except httpx.HTTPStatusError as e:
                 detail = e.response.json().get("detail", str(e))
-                raise HTTPException(status_code=e.response.status_code, detail=detail)
+                raise HTTPException(
+                    status_code=e.response.status_code, detail=detail)
             except httpx.ConnectError:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -186,7 +191,8 @@ class IngestServiceClient:
                 return response.json()
             except httpx.HTTPStatusError as e:
                 detail = e.response.json().get("detail", str(e))
-                raise HTTPException(status_code=e.response.status_code, detail=detail)
+                raise HTTPException(
+                    status_code=e.response.status_code, detail=detail)
             except httpx.ConnectError:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -216,7 +222,8 @@ class IngestServiceClient:
                 return response.json()
             except httpx.HTTPStatusError as e:
                 detail = e.response.json().get("detail", str(e))
-                raise HTTPException(status_code=e.response.status_code, detail=detail)
+                raise HTTPException(
+                    status_code=e.response.status_code, detail=detail)
             except httpx.ConnectError:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -244,7 +251,8 @@ class IngestServiceClient:
                 return response.json()
             except httpx.HTTPStatusError as e:
                 detail = e.response.json().get("detail", str(e))
-                raise HTTPException(status_code=e.response.status_code, detail=detail)
+                raise HTTPException(
+                    status_code=e.response.status_code, detail=detail)
             except httpx.ConnectError:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -270,7 +278,8 @@ class IngestServiceClient:
                 return response.json()
             except httpx.HTTPStatusError as e:
                 detail = e.response.json().get("detail", str(e))
-                raise HTTPException(status_code=e.response.status_code, detail=detail)
+                raise HTTPException(
+                    status_code=e.response.status_code, detail=detail)
             except httpx.ConnectError:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -289,7 +298,8 @@ class IngestServiceClient:
                 return response.json()
             except httpx.HTTPStatusError as e:
                 detail = e.response.json().get("detail", str(e))
-                raise HTTPException(status_code=e.response.status_code, detail=detail)
+                raise HTTPException(
+                    status_code=e.response.status_code, detail=detail)
             except httpx.ConnectError:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -26,7 +26,8 @@ router = APIRouter(prefix="/pipeline", tags=["Pipeline"])
 # Configuration
 PROJECT_ID = os.getenv("GCP_PROJECT_ID", "otto-pm")
 BUCKET_RAW = os.getenv("GCS_BUCKET_RAW", "otto-pm-raw-repos")
-BUCKET_PROCESSED = os.getenv("GCS_BUCKET_PROCESSED", "otto-pm-processed-chunks")
+BUCKET_PROCESSED = os.getenv(
+    "GCS_BUCKET_PROCESSED", "otto-pm-processed-chunks")
 
 # Initialize shared components
 commit_tracker = CommitTracker(PROJECT_ID, BUCKET_PROCESSED)
@@ -139,7 +140,8 @@ class CodeCompleteResponse(BaseModel):
     language: str
     confidence: str
     detected_file: Optional[str] = None  # ✅ NEW: Shows auto-detected file
-    detection_confidence: Optional[str] = None  # ✅ NEW: Confidence in detection
+    # ✅ NEW: Confidence in detection
+    detection_confidence: Optional[str] = None
     detection_similarity: Optional[float] = None  # ✅ NEW: Similarity score
     github_pr: Optional[str] = None
 
@@ -153,7 +155,6 @@ class CodeEditRequest(BaseModel):
     save_local: bool = False
 
 
-
 class CodeEditResponse(BaseModel):
     modified_code: str
     file: str
@@ -163,6 +164,7 @@ class CodeEditResponse(BaseModel):
     detection_confidence: Optional[str] = None  # ✅ NEW
     github_pr: Optional[str] = None
     github_branch: Optional[str] = None
+
 
 class SearchRequest(BaseModel):
     repo_full_name: str
@@ -222,7 +224,8 @@ async def ingest_repository(request: IngestRequest):
 
         # Run ingestion
         ingester = GitHubIngester(PROJECT_ID, BUCKET_RAW, request.github_token)
-        metadata = ingester.ingest_repository(request.repo_full_name, request.branch)
+        metadata = ingester.ingest_repository(
+            request.repo_full_name, request.branch)
 
         # Save commit info
         commit = gh_repo.get_branch(branch).commit
@@ -303,15 +306,15 @@ async def embed_repository(request: EmbedRequest):
 async def run_full_pipeline(request: FullPipelineRequest):
     """
     Run the complete pipeline: Ingest → Chunk → Embed
-    
+
     This is the main endpoint called by:
     - Backend when user triggers indexing
     - Webhook handler on push events
     """
     try:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"🚀 FULL PIPELINE: {request.repo_full_name}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         # ---- Step 1: Ingest ----
         print(f"\n📥 Step 1/3: Ingesting...")
@@ -331,8 +334,10 @@ async def run_full_pipeline(request: FullPipelineRequest):
 
             if chunks_blob.exists():
                 content = chunks_blob.download_as_text()
-                chunks = [json.loads(line) for line in content.split('\n') if line.strip()]
-                has_embeddings = all(c.get('embedding') for c in chunks) if chunks else False
+                chunks = [json.loads(line)
+                          for line in content.split('\n') if line.strip()]
+                has_embeddings = all(c.get('embedding')
+                                     for c in chunks) if chunks else False
 
                 if has_embeddings:
                     return FullPipelineResponse(
@@ -368,25 +373,30 @@ async def run_full_pipeline(request: FullPipelineRequest):
             client = storage.Client(project=PROJECT_ID)
             bucket = client.bucket(BUCKET_PROCESSED)
             repo_path = get_shared_repo_path(request.repo_full_name)
-            content = bucket.blob(f"{repo_path}/chunks.jsonl").download_as_text()
-            chunks = [json.loads(line) for line in content.split('\n') if line.strip()]
+            content = bucket.blob(
+                f"{repo_path}/chunks.jsonl").download_as_text()
+            chunks = [json.loads(line)
+                      for line in content.split('\n') if line.strip()]
 
-            schema_report  = SchemaValidator().validate(chunks)
+            schema_report = SchemaValidator().validate(chunks)
             anomaly_report = AnomalyDetector().detect(chunks, request.repo_full_name)
-            bias_report    = BiasDetector().detect(chunks, request.repo_full_name)
+            bias_report = BiasDetector().detect(chunks, request.repo_full_name)
 
-            print(f"   Schema:  {'✅ PASS' if schema_report['overall_pass'] else '⚠️ FAIL'}")
-            print(f"   Anomaly: {'✅ PASS' if anomaly_report['passed'] else '⚠️ FAIL'}")
-            print(f"   Bias:    {'✅ None' if not bias_report['bias_detected'] else '⚠️ Detected'}")
+            print(
+                f"   Schema:  {'✅ PASS' if schema_report['overall_pass'] else '⚠️ FAIL'}")
+            print(
+                f"   Anomaly: {'✅ PASS' if anomaly_report['passed'] else '⚠️ FAIL'}")
+            print(
+                f"   Bias:    {'✅ None' if not bias_report['bias_detected'] else '⚠️ Detected'}")
         except Exception as e:
             print(f"⚠️  Validation skipped: {e}")
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"✅ PIPELINE COMPLETE")
         print(f"   Files:    {ingest_result.total_files}")
         print(f"   Chunks:   {chunk_result.total_chunks}")
         print(f"   Embedded: {embed_result.total_embedded}")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         return FullPipelineResponse(
             success=True,
@@ -415,7 +425,7 @@ async def ask_question(request: AskRequest):
     """Ask a question about the codebase using RAG."""
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
-                         enable_github=True, enable_local_save=False)
+                          enable_github=True, enable_local_save=False)
         rag.github_client = GitHubClient(request.github_token)
 
         repo_path = get_shared_repo_path(request.repo_full_name)
@@ -440,7 +450,7 @@ async def generate_docs(request: GenerateDocsRequest):
     """Generate documentation for a codebase."""
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
-                         enable_github=True, enable_local_save=False)
+                          enable_github=True, enable_local_save=False)
         rag.github_client = GitHubClient(request.github_token)
 
         repo_path = get_shared_repo_path(request.repo_full_name)
@@ -472,13 +482,13 @@ async def generate_docs(request: GenerateDocsRequest):
 async def complete_code(request: CodeCompleteRequest):
     """
     Get intelligent code completion with AUTOMATIC file detection.
-    
+
     If target_file is not provided and push_to_github=True,
     Otto will automatically detect the most relevant file using semantic search.
     """
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
-                         enable_github=True, enable_local_save=False)
+                          enable_github=True, enable_local_save=False)
         rag.github_client = GitHubClient(request.github_token)
 
         repo_path = get_shared_repo_path(request.repo_full_name)
@@ -504,9 +514,12 @@ async def complete_code(request: CodeCompleteRequest):
             completion=result['completion'],
             language=result['language'],
             confidence=result['confidence'],
-            detected_file=result.get('detected_file'),  # ✅ Show auto-detected file
-            detection_confidence=result.get('detection_confidence'),  # ✅ Detection confidence
-            detection_similarity=result.get('detection_similarity'),  # ✅ Similarity score
+            # ✅ Show auto-detected file
+            detected_file=result.get('detected_file'),
+            detection_confidence=result.get(
+                'detection_confidence'),  # ✅ Detection confidence
+            detection_similarity=result.get(
+                'detection_similarity'),  # ✅ Similarity score
             github_pr=result.get('github', {}).get('pr_url')
         )
 
@@ -524,7 +537,7 @@ async def edit_code(request: CodeEditRequest):
     """Edit code based on instructions."""
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
-                         enable_github=True, enable_local_save=False)
+                          enable_github=True, enable_local_save=False)
         rag.github_client = GitHubClient(request.github_token)
 
         repo_path = get_shared_repo_path(request.repo_full_name)
@@ -604,7 +617,7 @@ async def ask_question_stream(request: AskRequest):
     """Ask a question with real-time token-by-token SSE streaming."""
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
-                         enable_github=True, enable_local_save=False)
+                          enable_github=True, enable_local_save=False)
         rag.github_client = GitHubClient(request.github_token)
 
         repo_path = get_shared_repo_path(request.repo_full_name)
@@ -646,7 +659,7 @@ async def generate_docs_stream(request: GenerateDocsRequest):
     """Generate documentation with real-time token-by-token SSE streaming."""
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
-                         enable_github=True, enable_local_save=False)
+                          enable_github=True, enable_local_save=False)
         rag.github_client = GitHubClient(request.github_token)
 
         repo_path = get_shared_repo_path(request.repo_full_name)
@@ -688,7 +701,7 @@ async def edit_code_stream(request: CodeEditRequest):
     """Edit code with real-time token-by-token SSE streaming."""
     try:
         rag = RAGServices(PROJECT_ID, BUCKET_PROCESSED,
-                         enable_github=True, enable_local_save=False)
+                          enable_github=True, enable_local_save=False)
         rag.github_client = GitHubClient(request.github_token)
 
         repo_path = get_shared_repo_path(request.repo_full_name)
@@ -707,7 +720,8 @@ async def edit_code_stream(request: CodeEditRequest):
         if result.get('error'):
             async def error_gen():
                 yield f"data: {json.dumps({'type': 'error', 'message': result['error']})}\n\n"
-            return StreamingResponse(error_gen(), media_type="text/event-stream")
+            return StreamingResponse(
+                error_gen(), media_type="text/event-stream")
 
         stream_gen = result.get('modified_code_stream')
 
@@ -774,7 +788,8 @@ async def get_repo_status(owner: str, repo: str):
             status_info['chunked'] = True
             status_info['pipeline_progress'] = 66
             content = chunks_blob.download_as_text()
-            chunks = [json.loads(line) for line in content.split('\n') if line.strip()]
+            chunks = [json.loads(line)
+                      for line in content.split('\n') if line.strip()]
             status_info['total_chunks'] = len(chunks)
 
             embedded_count = sum(1 for c in chunks if c.get('embedding'))
