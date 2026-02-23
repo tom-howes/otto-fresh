@@ -8,7 +8,8 @@ import logging
 import argparse
 
 # Point to Otto's ingest-service
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../ingest-service"))
+sys.path.insert(0, os.path.join(
+    os.path.dirname(__file__), "../../ingest-service"))
 
 os.makedirs("logs", exist_ok=True)
 os.makedirs("data/raw", exist_ok=True)
@@ -26,11 +27,11 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # Config from env (same vars Otto already uses)
-PROJECT_ID    = os.getenv("GCP_PROJECT_ID", "otto-pm")
-BUCKET_RAW    = os.getenv("GCS_BUCKET_RAW", "otto-pm-raw-repos")
-BUCKET_PROC   = os.getenv("GCS_BUCKET_PROCESSED", "otto-pm-processed-chunks")
-GITHUB_TOKEN  = os.getenv("GITHUB_TOKEN")
-REPO          = os.getenv("OTTO_REPO", "otto-pm/otto")
+PROJECT_ID = os.getenv("GCP_PROJECT_ID", "otto-pm")
+BUCKET_RAW = os.getenv("GCS_BUCKET_RAW", "otto-pm-raw-repos")
+BUCKET_PROC = os.getenv("GCS_BUCKET_PROCESSED", "otto-pm-processed-chunks")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+REPO = os.getenv("OTTO_REPO", "otto-pm/otto")
 
 os.makedirs("data/raw", exist_ok=True)
 os.makedirs("data/processed", exist_ok=True)
@@ -48,7 +49,8 @@ def ingest():
     metadata = ingester.ingest_repository(REPO)
     with open("data/raw/metadata.json", "w") as f:
         json.dump(metadata, f, indent=2)
-    log.info(f"Ingested {metadata['total_files']} files @ {metadata['commit_sha'][:8]}")
+    log.info(
+        f"Ingested {metadata['total_files']} files @ {metadata['commit_sha'][:8]}")
 
 
 def chunk():
@@ -75,6 +77,7 @@ def chunk():
             f.write(json.dumps(chunk) + "\n")
 
     log.info(f"Chunked: {len(chunks)} chunks")
+
 
 def embed():
     from src.chunking.embedder import ChunkEmbedder
@@ -115,9 +118,10 @@ def validate():
 
     total = len(chunks)
     missing_embedding = sum(1 for c in chunks if not c.get("embedding"))
-    missing_content   = sum(1 for c in chunks if not c.get("content"))
-    missing_language  = sum(1 for c in chunks if not c.get("language"))
-    empty_content     = sum(1 for c in chunks if c.get("content", "").strip() == "")
+    missing_content = sum(1 for c in chunks if not c.get("content"))
+    missing_language = sum(1 for c in chunks if not c.get("language"))
+    empty_content = sum(1 for c in chunks if c.get(
+        "content", "").strip() == "")
 
     report = {
         "timestamp": datetime.now().isoformat(),
@@ -139,18 +143,20 @@ def validate():
     log.info(f"  Missing content:    {missing_content}")
 
     if not report["pass"]:
-        raise ValueError(f"Validation failed — see data/processed/validation_report.json")
+        raise ValueError(
+            f"Validation failed — see data/processed/validation_report.json")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("stage", choices=["ingest", "chunk", "embed", "validate"])
+    parser.add_argument(
+        "stage", choices=["ingest", "chunk", "embed", "validate"])
     args = parser.parse_args()
 
     stages = {
-        "ingest":   ingest,
-        "chunk":    chunk,
-        "embed":    embed,
+        "ingest": ingest,
+        "chunk": chunk,
+        "embed": embed,
         "validate": validate,
     }
     stages[args.stage]()
