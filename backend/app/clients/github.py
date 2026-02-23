@@ -64,7 +64,8 @@ def handle_error(response: Response, expected_status_code: int) -> None:
 def generate_jwt() -> JWT:
     """Generate a JWT for GitHub App authentication.
 
-    Creates a signed JWT using the app's private key, valid for 10 minutes.
+    Creates a signed JWT using the app's private key,
+    valid for 10 minutes.
     Used to authenticate as the GitHub App itself.
 
     Returns:

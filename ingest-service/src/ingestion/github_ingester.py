@@ -18,7 +18,8 @@ class GitHubIngester:
     """
     Ingest GitHub repositories with shared storage
 
-    Multiple users can ingest the same repo - chunks stored once and shared
+    Multiple users can ingest the same repo
+    chunks stored once and shared
     """
 
     def __init__(self, project_id: str, bucket_name: str,

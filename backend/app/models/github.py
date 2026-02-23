@@ -35,8 +35,10 @@ class UserTokens(TypedDict):
     """OAuth tokens returned after user authorization.
 
     Attributes:
-        access_token: Token for making API requests on behalf of the user.
-        refresh_token: Token for refreshing the access token when it expires.
+        access_token: Token for making API
+        requests on behalf of the user.
+        refresh_token: Token for refreshing
+        the access token when it expires.
     """
     access_token: UserAccessToken
     refresh_token: UserAccessToken | None
@@ -175,4 +177,4 @@ class GitHubFileContent(TypedDict):
 
 
 GitHubContent: TypeAlias = GitHubFileContent | list[GitHubFileContent]
-"""Repository content - either a single file or a list of directory entries."""
+"""Repo content - either one file or a list of directory entries."""

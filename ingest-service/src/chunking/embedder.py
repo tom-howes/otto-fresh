@@ -128,7 +128,8 @@ class ChunkEmbedder:
     def _generate_embeddings_batch(self, chunks: List[Dict]) -> Dict:
         """
         Generate embeddings in batches of 250 (Vertex AI limit).
-        MUCH FASTER than one-by-one: 216 chunks in ~10-15 seconds instead of 3-5 minutes!
+        MUCH FASTER than one-by-one: 216 chunks in ~10-15 seconds
+        instead of 3-5 minutes!
         """
         print(
             f"\n🔄 Generating embeddings via Vertex AI (batch size: {self.batch_size})...")
@@ -149,7 +150,8 @@ class ChunkEmbedder:
                 batch_texts.append(text)
 
             try:
-                # ✅ FAST: Embed entire batch at once (250 chunks in ~1 second!)
+                # ✅ FAST: Embed entire batch at once
+                # (250 chunks in ~1 second!)
                 embeddings = self.model.get_embeddings(batch_texts)
 
                 # Assign embeddings to chunks
