@@ -8,6 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes.auth import router as auth_router
 from app.routes.github import router as github_router
 from app.routes.user import router as user_router
+from app.routes.workspace import router as workspace_router
+from app.routes.issue import router as issue_router
+from app.routes.comment import router as comment_router
 from app.routes.rag import router as rag_router
 from app.routes.webhook import router as webhook_router
 from app.config import FRONTEND_URL
@@ -33,6 +36,9 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(github_router)
 app.include_router(user_router)
+app.include_router(workspace_router)
+app.include_router(issue_router)
+app.include_router(comment_router)
 app.include_router(rag_router)
 app.include_router(webhook_router)
 
@@ -54,8 +60,9 @@ async def root():
         "status": "running",
         "endpoints": {
             "auth": "/auth",
-            "github": "/github", 
+            "github": "/github",
             "users": "/users",
+            "workspaces": "/workspaces (issues, comments)",
             "rag": "/rag",
             "webhooks": "/webhook",
             "health": "/health"
