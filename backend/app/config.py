@@ -70,7 +70,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 INGEST_SERVICE_URL = os.getenv("INGEST_SERVICE_URL", "http://localhost:8081")
 
 # Validate URL format
-if INGEST_SERVICE_URL and not INGEST_SERVICE_URL.startswith(("http://", "https://")):
+if INGEST_SERVICE_URL and not INGEST_SERVICE_URL.startswith(
+        ("http://", "https://")):
     print(f"❌ ERROR: INGEST_SERVICE_URL must start with http:// or https://")
     print(f"   Current value: {INGEST_SERVICE_URL}")
     INGEST_SERVICE_URL = f"https://{INGEST_SERVICE_URL}"

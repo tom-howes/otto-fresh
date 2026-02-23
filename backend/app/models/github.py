@@ -30,9 +30,10 @@ UserId: TypeAlias = int
 RepositoryId: TypeAlias = int
 """Unique identifier for a repository (GitHub repository ID)."""
 
+
 class UserTokens(TypedDict):
     """OAuth tokens returned after user authorization.
-    
+
     Attributes:
         access_token: Token for making API requests on behalf of the user.
         refresh_token: Token for refreshing the access token when it expires.
@@ -43,7 +44,7 @@ class UserTokens(TypedDict):
 
 class GitHubUser(TypedDict):
     """GitHub user profile information.
-    
+
     Attributes:
         id: Unique identifier for the user.
         login: GitHub username.
@@ -78,7 +79,7 @@ class GitHubUser(TypedDict):
 
 class GitHubRepoOwner(TypedDict):
     """Repository owner information.
-    
+
     Attributes:
         id: Unique identifier for the owner.
         login: Owner's GitHub username.
@@ -91,7 +92,7 @@ class GitHubRepoOwner(TypedDict):
 
 class GitHubRepo(TypedDict):
     """GitHub repository information.
-    
+
     Attributes:
         id: Unique identifier for the repository.
         name: Repository name.
@@ -122,7 +123,7 @@ class GitHubRepo(TypedDict):
 
 class GitHubRefObject(TypedDict):
     """Git reference object containing commit information.
-    
+
     Attributes:
         sha: Git commit SHA hash.
         type: Object type (e.g., "commit").
@@ -135,7 +136,7 @@ class GitHubRefObject(TypedDict):
 
 class GitHubRef(TypedDict):
     """Git reference (branch or tag) information.
-    
+
     Attributes:
         ref: Full reference name (e.g., "refs/heads/main").
         node_id: GraphQL node ID.
@@ -150,7 +151,7 @@ class GitHubRef(TypedDict):
 
 class GitHubFileContent(TypedDict):
     """File or directory content information from a repository.
-    
+
     Attributes:
         name: File or directory name.
         path: Full path within the repository.

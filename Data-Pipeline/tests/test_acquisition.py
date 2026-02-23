@@ -25,7 +25,8 @@ def test_parse_repo_url_full_url(ingester):
 
 
 def test_parse_repo_url_git_suffix(ingester):
-    owner, repo = ingester._parse_repo_url("https://github.com/otto-pm/otto.git")
+    owner, repo = ingester._parse_repo_url(
+        "https://github.com/otto-pm/otto.git")
     assert owner == "otto-pm"
     assert repo == "otto"
 
@@ -47,17 +48,22 @@ def test_parse_repo_url_trailing_slash(ingester):
 def test_detect_language_python(ingester):
     assert ingester._detect_language("app/main.py") == "python"
 
+
 def test_detect_language_typescript(ingester):
     assert ingester._detect_language("frontend/page.tsx") == "typescript"
+
 
 def test_detect_language_javascript(ingester):
     assert ingester._detect_language("index.js") == "javascript"
 
+
 def test_detect_language_java(ingester):
     assert ingester._detect_language("Main.java") == "java"
 
+
 def test_detect_language_unknown(ingester):
     assert ingester._detect_language("Makefile") == "unknown"
+
 
 def test_detect_language_no_extension(ingester):
     assert ingester._detect_language("README") == "unknown"
