@@ -27,7 +27,8 @@ async def get_current_user(request: Request) -> User:
 
     Example:
         @router.get("/protected")
-        async def protected_route(current_user: User = Depends(get_current_user)):
+        async def protected_route(
+            current_user: User = Depends(get_current_user)):
             return {"user_id": current_user["id"]}
     """
     session_token: JWT = request.cookies.get("session_token")

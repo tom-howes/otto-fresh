@@ -1,6 +1,7 @@
 # backend/app/routes/auth.py
 """
-Authentication routes with Firestore-backed webhook sessions and login-time repo sync
+Authentication routes with Firestore-backed
+webhook sessions and login-time repo sync
 """
 from fastapi import APIRouter, Request, HTTPException, status, BackgroundTasks
 from fastapi.responses import RedirectResponse, JSONResponse
@@ -297,7 +298,7 @@ async def github_callback(
     )
     print("✓ Queued background sync for user's repos")
 
-    # Determine redirect — always pass token in URL so frontend can set cookie
+    # Determine redirect — pass token so frontend can set cookie
     if has_installation:
         redirect_url = f"{frontend_url}/project/backlog?token={session_token}"
     else:
@@ -323,7 +324,7 @@ async def github_callback(
 @router.post("/logout", status_code=status.HTTP_200_OK,
              tags=["Authentication"])
 async def logout(request: Request) -> JSONResponse:
-    """Log out the current user by clearing session and webhook registration."""
+    """Log out by clearing session and webhook registration."""
     try:
         session_token = request.cookies.get("session_token")
         if session_token:

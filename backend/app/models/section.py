@@ -7,8 +7,10 @@ class Section(BaseModel):
 
     Attributes:
         id: Unique identifier for the section.
-        title: Display name of the section (e.g., "TO DO", "IN PROGRESS").
-        position: Order position in the kanban board (lower = further left).
+        title: Display name of the section
+        (e.g., "TO DO", "IN PROGRESS").
+        position: Order position in the kanban board
+        (lower = further left).
         created_at: Timestamp when the section was created.
         updated_at: Timestamp when the section was last modified.
     """

@@ -32,7 +32,8 @@ def fix_directory(directory, aggressive=False):
     fixed = 0
     for f in py_files:
         rel = f.relative_to(dir_path)
-        cmd = ["autopep8", "--in-place"]
+        cmd = ["autopep8", "--in-place",
+               "--max-line-length=99"]
         if aggressive:
             cmd.append("--aggressive")
         cmd.append(str(f))
