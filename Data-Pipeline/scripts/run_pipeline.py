@@ -106,6 +106,7 @@ def embed():
 
 
 def validate():
+    from src.validation import SchemaValidator, AnomalyDetector, BiasDetector
     import json
     from datetime import datetime
 
@@ -115,6 +116,14 @@ def validate():
         for line in f:
             if line.strip():
                 chunks.append(json.loads(line))
+
+    schema_report  = SchemaValidator().validate(chunks)
+    anomaly_report = AnomalyDetector().detect(chunks, REPO)
+    bias_report    = BiasDetector().detect(chunks, REPO)
+
+    print(f"   Schema:  {'✅ PASS' if schema_report['overall_pass'] else '⚠️ FAIL'}")
+    print(f"   Anomaly: {'✅ PASS' if anomaly_report['passed'] else '⚠️ FAIL'}")
+    print(f"   Bias:    {'✅ None' if not bias_report['bias_detected'] else '⚠️ Detected'}")
 
     total = len(chunks)
     missing_embedding = sum(1 for c in chunks if not c.get("embedding"))
@@ -137,14 +146,26 @@ def validate():
     with open("data/processed/validation_report.json", "w") as f:
         json.dump(report, f, indent=2)
 
+    with open("data/processed/schema_validation.json", "w") as f:
+        json.dump(schema_report, f, indent=2)
+
+    with open("data/processed/anomaly_detection.json", "w") as f:
+        json.dump(anomaly_report, f, indent=2)
+    
+    with open("data/processed/bias_detection.json", "w") as f:
+        json.dump(bias_report, f, indent=2)
+
     log.info(f"Validation: {'PASS' if report['pass'] else 'FAIL'}")
     log.info(f"  Total chunks:       {total}")
     log.info(f"  Missing embeddings: {missing_embedding}")
     log.info(f"  Missing content:    {missing_content}")
 
-    if not report["pass"]:
-        raise ValueError(
-            f"Validation failed — see data/processed/validation_report.json")
+    if not (
+        report["pass"] and 
+        schema_report["overall_pass"] and 
+        not bias_report["bias_detected"] and 
+        anomaly_report["passed"]):
+        raise ValueError(f"Validation failed see data/processed/*_report.json")
 
 
 if __name__ == "__main__":
