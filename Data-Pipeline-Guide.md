@@ -420,15 +420,7 @@ export GCS_BUCKET_PROCESSED="otto-pm-processed-chunks"
 export VERTEX_LOCATION="us-east1"
 ```
 
-### 4.3 Initialize DVC
-
-DVC must be initialized with the `--subdir` flag because `Data-Pipeline/` is a subdirectory inside the main Otto git repo:
-
-```bash
-dvc init --subdir
-```
-
-### 4.4 View the Pipeline DAG
+### 4.3 View the Pipeline DAG
 
 Verify the pipeline structure:
 
@@ -460,40 +452,26 @@ dvc dag
 +----------+
 | validate |
 +----------+
-     *
-     *
-     *
-+---------+
-| anomaly |
-+---------+
-     *
-     *
-     *
-+------+
-| bias |
-+------+
 ```
 
-The 6 stages and their dependencies are defined in `dvc.yaml`:
+The 4 stages and their dependencies are defined in `dvc.yaml`:
 
 | Stage | Script | Description |
 |-------|--------|-------------|
 | **ingest** | `scripts/run_pipeline.py ingest` | Downloads repo files from GitHub to GCS |
 | **chunk** | `scripts/run_pipeline.py chunk` | Parses code into chunks via Tree-sitter AST |
 | **embed** | `scripts/run_pipeline.py embed` | Generates 768-dim embeddings via Vertex AI |
-| **validate** | `scripts/schema_validation.py` | Validates chunk schema (6 expectations) |
-| **anomaly** | `scripts/anomaly_detection.py` | Detects distribution anomalies with Slack alerts |
-| **bias** | `scripts/bias_detection.py` | Checks for bias across 4 slicing strategies |
+| **validate** | `scripts/schema_validation.py validate` | Validates chunk schema, performs anomaly and bias detection
 
-### 4.5 Run the Full DVC Pipeline
+### 4.4 Run the Full DVC Pipeline
 
 ```bash
 dvc repro
 ```
 
-This executes all 6 stages in dependency order. DVC tracks inputs and outputs and only reruns stages whose dependencies have changed.
+This executes all 4 stages in dependency order. DVC tracks inputs and outputs and only reruns stages whose dependencies have changed. Anomaly, schema, and bias validation are all included in the validation step.
 
-### 4.6 Run Individual DVC Stages
+### 4.5 Run Individual DVC Stages
 
 You can run any single stage (and its upstream dependencies if needed):
 
@@ -509,12 +487,6 @@ dvc repro embed
 
 # Run only the validation stage
 dvc repro validate
-
-# Run only the anomaly detection stage
-dvc repro anomaly
-
-# Run only the bias detection stage
-dvc repro bias
 ```
 
 ### 4.7 Inspect Stage Outputs
@@ -528,10 +500,11 @@ ls data/raw/
 # Check that processed chunks exist
 ls data/processed/
 
-# Check validation and monitoring logs
-cat logs/schema_validation.log
-cat logs/anomaly_detection.log
-cat logs/bias_detection.log
+# Check validation reports and monitoring logs
+cat logs/pipeline.log
+cat data/processed/schema_validation.json
+cat data/processed/bias_detection.json 
+cat data/processed/anomaly_detection.json
 ```
 
 ### 4.8 Verify DVC Tracking
