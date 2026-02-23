@@ -15,6 +15,7 @@ dvc-gs>=3.0.0
 
 # --- Code Parsing ---
 tree-sitter>=0.21.0
+tree-sitter-languages==1.10.2
 tree-sitter-python>=0.21.0
 tree-sitter-javascript>=0.21.0
 tree-sitter-typescript>=0.21.0
