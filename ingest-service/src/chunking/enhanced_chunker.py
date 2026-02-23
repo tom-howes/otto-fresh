@@ -1,6 +1,7 @@
 """
 Enhanced chunker optimized for documentation and code completion
-Extracts: type hints, docstrings, decorators, exceptions, interfaces, exports, globals
+Extracts: type hints, docstrings, decorators, exceptions,
+interfaces, exports, globals
 """
 from .chunker import CodeChunker
 import re
@@ -147,8 +148,8 @@ class EnhancedCodeChunker(CodeChunker):
         """Extract type hints from function signatures"""
         type_hints = {}
 
-        # Pattern for function with type hints: def func(x: int, y: str) ->
-        # bool:
+        # Pattern for function with type hints:
+        # def func(x: int, y: str) -> bool:
         pattern = r'def\s+(\w+)\s*\((.*?)\)\s*(?:->\s*([^:]+))?:'
 
         for match in re.finditer(pattern, content, re.MULTILINE | re.DOTALL):
@@ -287,7 +288,8 @@ class EnhancedCodeChunker(CodeChunker):
 
             # Find except clauses
             if 'except ' in line:
-                # Handle: except Exception, except (Error1, Error2), except
+                # Handle: except Exception,
+                # except (Error1, Error2), except
                 # Exception as e
                 matches = re.findall(r'except\s+(\w+)', line)
                 exceptions['caught'].update(matches)
@@ -371,7 +373,7 @@ class EnhancedCodeChunker(CodeChunker):
 
         return async_funcs
 
-    # ==================== JAVASCRIPT/TYPESCRIPT EXTRACTORS ==================
+    # ===== JAVASCRIPT/TYPESCRIPT EXTRACTORS =====
 
     def _extract_js_exports(self, content: str) -> Dict:
         """Extract JavaScript/TypeScript exports"""

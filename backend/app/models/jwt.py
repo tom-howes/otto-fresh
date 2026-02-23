@@ -25,7 +25,8 @@ class GitHubAppJWTPayload(TypedDict):
     """JWT payload for GitHub App authentication.
 
     Attributes:
-        iat: Issued at timestamp (set 60 seconds in the past for clock drift).
+        iat: Issued at timestamp
+        (set 60 seconds in the past for clock drift).
         exp: Expiration timestamp (maximum 10 minutes from issue).
         iss: Issuer - the GitHub App ID.
     """

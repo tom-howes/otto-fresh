@@ -1,5 +1,6 @@
 """
-DVC Pipeline Runner — calls Otto's actual ingest-service classes directly
+DVC Pipeline Runner — calls Otto's actual
+ingest-service classes directly
 """
 import os
 import sys

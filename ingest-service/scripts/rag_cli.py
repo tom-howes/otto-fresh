@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-RAG CLI - Interactive interface with STREAMING support + GitHub Integration
+RAG CLI - Interactive interface with
+STREAMING support + GitHub Integration
 """
 from src.rag.rag_services import RAGServices
 import os
