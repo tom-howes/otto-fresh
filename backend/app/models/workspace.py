@@ -5,6 +5,7 @@ from typing_extensions import TypeAlias
 WorkspaceId: TypeAlias = str
 """Unique identifier for a workspace."""
 
+
 class Workspace(BaseModel):
     """Complete workspace data returned from the API.
 
