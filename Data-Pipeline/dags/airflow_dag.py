@@ -48,7 +48,7 @@ default_args = {
 # ---------------------------------------------------------------------------
 
 with DAG(
-    dag_id="otto_data_pipeline",
+    dag_id="airflow_dag",
     default_args=default_args,
     description="Otto: Ingest → Chunk → Embed → Validate",
     # Schedule disabled — triggered manually or via API
