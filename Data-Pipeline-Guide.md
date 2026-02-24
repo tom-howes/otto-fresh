@@ -756,6 +756,9 @@ Then install Airflow and pipeline dependencies:
 pip install "apache-airflow==2.10.4" \
   --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.10.4/constraints-3.11.txt"
 
+# IMPORTANT: There is an error that will appear regarding protobuf, 
+# this is not breaking and will still allow running airflow.
+
 # Install pipeline dependencies on top
 pip install google-cloud-storage==2.18.2 google-cloud-aiplatform==1.72.0 \
   google-cloud-firestore==2.19.0 google-generativeai==0.8.3 \
