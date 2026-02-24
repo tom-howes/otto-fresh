@@ -391,7 +391,7 @@ curl -X POST https://ingest-service-484671782718.us-east1.run.app/pipeline/code/
 
 ## 4. Testing the DVC Pipeline
 
-This section covers how to run and verify the DVC (Data Version Control) pipeline locally. This requires a local environment setup.
+This section covers how to run and verify the DVC (Data Version Control) pipeline locally. This requires a local environment setup. 
 
 ### 4.1 Clone and Setup
 
@@ -410,7 +410,15 @@ pip install -r requirements.txt
 
 > **Important:** Always use `python -m pytest` and `python -m dvc` to ensure the venv Python is used, not your system/Anaconda Python.
 
-### 4.2 Set Environment Variables
+### 4.2 Adding the Google Cloud Security Account Key
+
+1. A service account key will be provided with this submission named sa-key.json. Add this here: `otto/Data-Pipeline/sa-key.json`
+2. Login with google cloud `gcloud auth login`
+3. Authenticate using the service account key `gcloud auth activate-service-account --key-file=sa-key.json`
+4. Run `export GOOGLE_APPLICATION_CREDENTIALS="credentials/sa-key.json"`
+5. Set otto-pm as the project `gcloud config set project otto-pm`
+
+### 4.3 Set Environment Variables
 
 ```bash
 export GITHUB_TOKEN="YOUR_GITHUB_TOKEN"
@@ -420,7 +428,7 @@ export GCS_BUCKET_PROCESSED="otto-pm-processed-chunks"
 export VERTEX_LOCATION="us-east1"
 ```
 
-### 4.3 View the Pipeline DAG
+### 4.4 View the Pipeline DAG
 
 Verify the pipeline structure:
 
@@ -463,7 +471,7 @@ The 4 stages and their dependencies are defined in `dvc.yaml`:
 | **embed** | `scripts/run_pipeline.py embed` | Generates 768-dim embeddings via Vertex AI |
 | **validate** | `scripts/schema_validation.py validate` | Validates chunk schema, performs anomaly and bias detection
 
-### 4.4 Run the Full DVC Pipeline
+### 4.5 Run the Full DVC Pipeline
 
 ```bash
 dvc repro
@@ -471,7 +479,7 @@ dvc repro
 
 This executes all 4 stages in dependency order. DVC tracks inputs and outputs and only reruns stages whose dependencies have changed. Anomaly, schema, and bias validation are all included in the validation step.
 
-### 4.5 Run Individual DVC Stages
+### 4.6 Run Individual DVC Stages
 
 You can run any single stage (and its upstream dependencies if needed):
 
