@@ -34,7 +34,8 @@
    - 4.6 Run Individual DVC Stages
    - 4.7 Inspect Stage Outputs
    - 4.8 Verify DVC Tracking
-   - 4.9 [Reproducibility & Data Versioning](#49-reproducibility--data-versioning)
+   - 4.9 [Data Versioning with DVC](#49-data-versioning-with-dvc)
+   - 4.10 [Running the Airflow DAG](#410-running-the-airflow-dag)
 5. [Running the Test Suite (69 Tests)](#5-running-the-test-suite-69-tests)
 6. [Data Validation & Monitoring](#6-data-validation--monitoring)
 7. [Pipeline Architecture Reference](#7-pipeline-architecture-reference)
@@ -55,7 +56,7 @@ Ingest → Chunk → Embed → Schema Validation → Anomaly Detection → Bias 
 
 The pipeline is **fully deployed on Google Cloud Run** — no local environment setup is required to test the core pipeline. You can test every endpoint using `curl` from your terminal with **any GitHub repository you have access to** (public or private).
 
-A separate section (Section 4) covers running the DVC pipeline locally if you'd like to verify the DVC configuration and reproducibility.
+A separate section (Section 4) covers running the DVC pipeline and Airflow DAG locally if you'd like to verify the pipeline configuration and reproducibility.
 
 ---
 
@@ -118,10 +119,11 @@ otto/
 |   |-- context/
 |   +-- utils/
 |
-|-- Data-Pipeline/                       # MLOps pipeline (DVC)
+|-- Data-Pipeline/                       # MLOps pipeline (DVC + Airflow)
+|   |-- dags/
+|   |   +-- airflow_dag.py         # Airflow DAG definition
 |   |-- scripts/
-|   |   |-- run_pipeline.py              # DVC stage runner
-|   |   +-- gantt.py                     # Bottleneck visualization
+|   |   +-- run_pipeline.py              # DVC/Airflow stage runner
 |   |-- tests/
 |   |   |-- conftest.py
 |   |   |-- test_acquisition.py
@@ -154,8 +156,8 @@ otto/
 |---------|---------|------------|
 | **backend** | Handles authentication (GitHub OAuth), user/workspace management via Firestore, and proxies RAG requests to the ingest-service. Receives GitHub webhooks to trigger pipeline runs on push events. | Cloud Run (`us-east1`) |
 | **ingest-service** | Core pipeline engine. Ingests repos from GitHub, chunks code via Tree-sitter AST, generates embeddings via Vertex AI, runs validation, and serves all RAG endpoints (Q&A, docs generation, code completion, code editing, semantic search). | Cloud Run (`us-east1`) |
-| **frontend** | Next.js UI providing project management (board, backlog, roadmap) and an AI assistant panel that streams RAG responses
-| **Data-Pipeline** | DVC-orchestrated MLOps layer. Wraps the same production classes from `ingest-service` into a reproducible, versioned DAG for local execution, testing, and auditing. | Local (DVC) |
+| **frontend** | Next.js UI providing project management (board, backlog, roadmap) and an AI assistant panel that streams RAG responses via SSE proxies. | Vercel |
+| **Data-Pipeline** | MLOps layer with dual orchestration: Airflow DAG for scheduling and visualization, DVC for data versioning. Wraps the same production classes from `ingest-service` with no code duplication. | Local (Airflow + DVC) |
 
 #### How the Services Connect
 
@@ -175,7 +177,7 @@ User / GitHub Webhook
     Vertex AI (embeddings) + Gemini (LLM)
 ```
 
-The **backend** authenticates users and forwards requests to **ingest-service**, which runs the pipeline and serves RAG features. Both services read/write to the same GCS buckets. The **Data-Pipeline** DVC layer imports the same source classes from `ingest-service` and targets the same GCS infrastructure, providing a local reproducibility and versioning layer without duplicating code.
+The **backend** authenticates users and forwards requests to **ingest-service**, which runs the pipeline and serves RAG features. Both services read/write to the same GCS buckets. The **Data-Pipeline** layer imports the same source classes from `ingest-service` and targets the same GCS infrastructure, providing local reproducibility, data versioning, and pipeline visualization without duplicating code.
 
 ---
 
@@ -627,7 +629,7 @@ The 4 stages and their dependencies are defined in `dvc.yaml`:
 | **ingest** | `scripts/run_pipeline.py ingest` | Downloads repo files from GitHub to GCS |
 | **chunk** | `scripts/run_pipeline.py chunk` | Parses code into chunks via Tree-sitter AST |
 | **embed** | `scripts/run_pipeline.py embed` | Generates 768-dim embeddings via Vertex AI |
-| **validate** | `scripts/schema_validation.py validate` | Validates chunk schema, performs anomaly and bias detection |
+| **validate** | `scripts/run_pipeline.py validate` | Validates chunk schema, performs anomaly and bias detection |
 
 ### 4.5 Run the Full DVC Pipeline
 
@@ -688,11 +690,7 @@ cat dvc.yaml
 
 ### 4.9 Data Versioning with DVC
 
-DVC tracks all pipeline inputs and outputs with content-addressable 
-hashing. After each `dvc repro`, the `dvc.lock` file records the 
-MD5 hash of every stage's dependencies and outputs. This file is 
-committed to Git, ensuring a record of exactly what data was 
-produced by each pipeline run.
+DVC tracks all pipeline inputs and outputs with content-addressable hashing. After each `dvc repro`, the `dvc.lock` file records the MD5 hash of every stage's dependencies and outputs. This file is committed to Git, ensuring a record of exactly what data was produced by each pipeline run.
 
 **DVC Remote:**
 ```
@@ -718,6 +716,218 @@ dvc status    # check which stages are up-to-date
 dvc push      # upload versioned artifacts to GCS
 dvc pull      # download artifacts from GCS
 ```
+
+### 4.10 Running the Airflow DAG
+
+An Airflow DAG is provided in `dags/otto_pipeline_dag.py` that orchestrates the same 4-stage pipeline. Airflow handles scheduling and DAG visualization; DVC continues to handle data versioning. The DAG calls the same `scripts/run_pipeline.py` used by DVC, so there is zero code duplication.
+
+> **Note:** Airflow must be installed in a separate virtual environment due to transitive dependency conflicts with the pipeline's Google Cloud libraries. This is standard practice — Airflow's own documentation recommends isolated installation.
+
+#### Setup
+
+```bash
+cd otto/Data-Pipeline
+
+# Create a separate venv for Airflow
+python3.11 -m venv airflow-venv
+```
+
+Activate the venv:
+
+**macOS/Linux:**
+```bash
+source airflow-venv/bin/activate
+```
+
+**Windows (PowerShell):**
+```powershell
+.\airflow-venv\Scripts\Activate.ps1
+```
+
+**Windows (CMD):**
+```cmd
+airflow-venv\Scripts\activate.bat
+```
+
+Then install Airflow and pipeline dependencies:
+
+```bash
+# Install Airflow with constraints (prevents dependency conflicts)
+pip install "apache-airflow==2.10.4" \
+  --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.10.4/constraints-3.11.txt"
+
+# Install pipeline dependencies on top
+pip install google-cloud-storage==2.18.2 google-cloud-aiplatform==1.72.0 \
+  google-cloud-firestore==2.19.0 google-generativeai==0.8.3 \
+  tree-sitter tree-sitter-languages==1.10.2 PyGithub numpy jsonlines \
+  slack-sdk python-dotenv pyyaml tqdm
+```
+
+#### Initialize Airflow
+
+**macOS/Linux:**
+```bash
+export AIRFLOW_HOME=$(pwd)
+export AIRFLOW__CORE__DAGS_FOLDER=$(pwd)/dags
+export AIRFLOW__CORE__LOAD_EXAMPLES=False
+
+airflow db init
+
+airflow users create \
+  --username admin --password admin \
+  --firstname Otto --lastname Admin \
+  --role Admin --email admin@test.com
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:AIRFLOW_HOME=(Get-Location).Path
+$env:AIRFLOW__CORE__DAGS_FOLDER="$($env:AIRFLOW_HOME)\dags"
+$env:AIRFLOW__CORE__LOAD_EXAMPLES="False"
+
+airflow db init
+
+airflow users create `
+  --username admin --password admin `
+  --firstname Otto --lastname Admin `
+  --role Admin --email admin@test.com
+```
+
+**Windows (CMD):**
+```cmd
+set AIRFLOW_HOME=%cd%
+set AIRFLOW__CORE__DAGS_FOLDER=%cd%\dags
+set AIRFLOW__CORE__LOAD_EXAMPLES=False
+
+airflow db init
+
+airflow users create --username admin --password admin --firstname Otto --lastname Admin --role Admin --email admin@test.com
+```
+
+#### Set Environment Variables
+
+The Airflow scheduler must have access to the same environment variables used by the pipeline. Set these **before** starting the scheduler.
+
+**macOS/Linux:**
+```bash
+export GITHUB_TOKEN="YOUR_GITHUB_TOKEN"
+export GCP_PROJECT_ID="otto-pm"
+export GCS_BUCKET_RAW="otto-pm-raw-repos"
+export GCS_BUCKET_PROCESSED="otto-pm-processed-chunks"
+export VERTEX_LOCATION="us-east1"
+export OTTO_REPO="otto-pm/otto"
+export GOOGLE_APPLICATION_CREDENTIALS="sa-key.json"
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:GITHUB_TOKEN="YOUR_GITHUB_TOKEN"
+$env:GCP_PROJECT_ID="otto-pm"
+$env:GCS_BUCKET_RAW="otto-pm-raw-repos"
+$env:GCS_BUCKET_PROCESSED="otto-pm-processed-chunks"
+$env:VERTEX_LOCATION="us-east1"
+$env:OTTO_REPO="otto-pm/otto"
+$env:GOOGLE_APPLICATION_CREDENTIALS="sa-key.json"
+```
+
+**Windows (CMD):**
+```cmd
+set GITHUB_TOKEN=YOUR_GITHUB_TOKEN
+set GCP_PROJECT_ID=otto-pm
+set GCS_BUCKET_RAW=otto-pm-raw-repos
+set GCS_BUCKET_PROCESSED=otto-pm-processed-chunks
+set VERTEX_LOCATION=us-east1
+set OTTO_REPO=otto-pm/otto
+set GOOGLE_APPLICATION_CREDENTIALS=sa-key.json
+```
+
+#### Start Airflow (two terminals)
+
+Both terminals must activate the airflow-venv, set `AIRFLOW_HOME`, and have the pipeline environment variables set.
+
+**Terminal 1 — Webserver:**
+
+macOS/Linux:
+```bash
+cd otto/Data-Pipeline
+source airflow-venv/bin/activate
+export AIRFLOW_HOME=$(pwd)
+airflow webserver --port 8080
+```
+
+Windows (PowerShell):
+```powershell
+cd otto\Data-Pipeline
+.\airflow-venv\Scripts\Activate.ps1
+$env:AIRFLOW_HOME=(Get-Location).Path
+airflow webserver --port 8080
+```
+
+**Terminal 2 — Scheduler:**
+
+macOS/Linux:
+```bash
+cd otto/Data-Pipeline
+source airflow-venv/bin/activate
+export AIRFLOW_HOME=$(pwd)
+export AIRFLOW__CORE__DAGS_FOLDER=$(pwd)/dags
+export AIRFLOW__CORE__LOAD_EXAMPLES=False
+# Set all pipeline env vars here (GITHUB_TOKEN, GCP_PROJECT_ID, etc.)
+airflow scheduler
+```
+
+Windows (PowerShell):
+```powershell
+cd otto\Data-Pipeline
+.\airflow-venv\Scripts\Activate.ps1
+$env:AIRFLOW_HOME=(Get-Location).Path
+$env:AIRFLOW__CORE__DAGS_FOLDER="$($env:AIRFLOW_HOME)\dags"
+$env:AIRFLOW__CORE__LOAD_EXAMPLES="False"
+# Set all pipeline env vars here ($env:GITHUB_TOKEN, etc.)
+airflow scheduler
+```
+
+#### Trigger the Pipeline
+
+**Via the UI:**
+1. Open `http://localhost:8080`
+2. Log in with `admin` / `admin`
+3. Toggle `otto_data_pipeline` to unpause (switch on the left)
+4. Click the play button (▶) → **Trigger DAG**
+
+**Via CLI (third terminal):**
+
+macOS/Linux:
+```bash
+source airflow-venv/bin/activate
+export AIRFLOW_HOME=$(pwd)
+airflow dags trigger otto_data_pipeline
+```
+
+Windows (PowerShell):
+```powershell
+.\airflow-venv\Scripts\Activate.ps1
+$env:AIRFLOW_HOME=(Get-Location).Path
+airflow dags trigger otto_data_pipeline
+```
+
+#### DAG Structure
+
+The DAG runs 4 tasks in sequence:
+
+```
+ingest → chunk → embed → validate
+```
+
+| Task | What It Does |
+|------|-------------|
+| `ingest` | Downloads repo files from GitHub to GCS |
+| `chunk` | Parses code into chunks via Tree-sitter AST |
+| `embed` | Generates 768-dim embeddings via Vertex AI |
+| `validate` | Runs schema validation, anomaly detection, bias detection |
+
+The Airflow UI provides a Gantt chart, task logs, and DAG visualization for monitoring pipeline execution.
+
 ---
 
 ## 5. Running the Test Suite (69 Tests)
@@ -790,7 +1000,7 @@ Tests are configured in `tests/conftest.py` with shared pytest fixtures for mock
 
 ## 6. Data Validation & Monitoring
 
-After embedding completes, three validation stages run automatically (both in the deployed pipeline and via DVC).
+After embedding completes, three validation stages run automatically (both in the deployed pipeline and via DVC/Airflow).
 
 ### 6.1 Schema Validation
 
@@ -888,7 +1098,7 @@ otto-pm-processed-chunks/
 | Vector Search | In-memory cosine similarity | Threshold > 0.6 |
 | Object Storage | Google Cloud Storage | Two buckets (raw + processed) |
 | Database | Firestore | User data, webhooks, workspaces |
-| Pipeline Tracking | DVC | 4-stage pipeline, GCS remote |
+| Pipeline Orchestration | Airflow + DVC | Airflow DAG for scheduling, DVC for data versioning |
 | Testing | pytest | 69 tests, mocked fixtures |
 | Python | 3.11 | Required version |
 
@@ -951,6 +1161,10 @@ python -m pytest tests/ -v
 ```
 
 Tests use mocked fixtures — no live API credentials are required.
+
+### Airflow dependency conflicts
+
+Airflow must be installed in a separate virtual environment (`airflow-venv`) from the main pipeline venv. See Section 4.10 for setup instructions.
 
 ---
 

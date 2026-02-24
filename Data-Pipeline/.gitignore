@@ -11,6 +11,7 @@ dist/
 build/
 *.egg
 .venv/
+airflow-venv/
 venv/
 ottoenv/
 env/
@@ -55,3 +56,12 @@ htmlcov/
 *.bak
 *.tmpcredentials/
 sa-key.json
+
+# Airflow local runtime files
+airflow.cfg
+airflow.db
+airflow-webserver.pid
+webserver_config.py
+logs/scheduler/
+logs/dag_processor_manager/
+airflow-venv/

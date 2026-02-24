@@ -90,12 +90,13 @@ User Query → Backend (auth) → Ingest Service → Vector Search → Gemini �
 ## Project Structure
 ```
 otto/
-├── Data-Pipeline                # MLOps pipeline (DVC orchestration)
+├── Data-Pipeline                # MLOps pipeline (DVC + Airflow)
+|   ├── dags                     # Airflow DAG definition
 │   ├── data
 │   │   ├── processed            # Chunks, embeddings, validation reports
 │   │   └── raw                  # Ingested repo metadata
 │   ├── logs                     # Pipeline execution logs
-│   ├── scripts                  # DVC stage runner + Gantt chart generator
+│   ├── scripts                  # DVC/Airflow stage runner
 │   └── tests                    # 69 pytest tests (acquisition, preprocessing, embedding)
 │
 ├── backend                      # FastAPI auth + orchestration service
