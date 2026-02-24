@@ -10,6 +10,7 @@
 ## Table of Contents
 
 1. [Overview](#1-overview)
+   - 1.1 [Code Structure](#11-code-structure)
 2. [How to Generate a GitHub Personal Access Token](#2-how-to-generate-a-github-personal-access-token)
 3. [Testing the Deployed Pipeline](#3-testing-the-deployed-pipeline)
    - 3.1 Health Check
@@ -26,12 +27,14 @@
    - 3.12 Code Editing
 4. [Testing the DVC Pipeline](#4-testing-the-dvc-pipeline)
    - 4.1 Clone and Setup
-   - 4.2 Initialize DVC
-   - 4.3 View the Pipeline DAG
-   - 4.4 Run the Full Pipeline
-   - 4.5 Run Individual Stages
-   - 4.6 Inspect Stage Outputs
-   - 4.7 Verify DVC Tracking
+   - 4.2 Authenticating the Google Cloud Security Account
+   - 4.3 Set Environment Variables
+   - 4.4 View the Pipeline DAG
+   - 4.5 Run the Full DVC Pipeline
+   - 4.6 Run Individual DVC Stages
+   - 4.7 Inspect Stage Outputs
+   - 4.8 Verify DVC Tracking
+   - 4.9 [Reproducibility & Data Versioning](#49-reproducibility--data-versioning)
 5. [Running the Test Suite (69 Tests)](#5-running-the-test-suite-69-tests)
 6. [Data Validation & Monitoring](#6-data-validation--monitoring)
 7. [Pipeline Architecture Reference](#7-pipeline-architecture-reference)
@@ -53,6 +56,126 @@ Ingest → Chunk → Embed → Schema Validation → Anomaly Detection → Bias 
 The pipeline is **fully deployed on Google Cloud Run** — no local environment setup is required to test the core pipeline. You can test every endpoint using `curl` from your terminal with **any GitHub repository you have access to** (public or private).
 
 A separate section (Section 4) covers running the DVC pipeline locally if you'd like to verify the DVC configuration and reproducibility.
+
+---
+
+### 1.1 Code Structure
+
+Otto is organized into four top-level services, each deployed independently:
+
+```
+otto/
+|-- backend/                        # FastAPI auth + orchestration
+|   |-- app/
+|   |   |-- clients/
+|   |   |   +-- ingest_service.py        # Pipeline trigger client
+|   |   |-- dependencies/
+|   |   |-- models/
+|   |   |-- routes/
+|   |   |   |-- rag.py                   # RAG proxy to ingest-service
+|   |   |   +-- webhook.py               # GitHub webhook handler
+|   |   |-- services/
+|   |   +-- utils/
+|   +-- docs/
+|
+|-- ingest-service/                      # Core pipeline + RAG service
+|   |-- app/
+|   |   +-- routes/
+|   |       +-- pipeline.py              # Pipeline + RAG endpoints
+|   |-- src/
+|   |   |-- ingestion/
+|   |   |   +-- github_ingester.py
+|   |   |-- chunking/
+|   |   |   |-- enhanced_chunker.py
+|   |   |   |-- chunker.py
+|   |   |   +-- embedder.py
+|   |   |-- validation/
+|   |   |   |-- schema_validation.py
+|   |   |   |-- anomaly_detection.py
+|   |   |   +-- bias_detection.py
+|   |   |-- rag/
+|   |   |   |-- rag_services.py
+|   |   |   |-- vector_search.py
+|   |   |   +-- llm_client_gemini_api.py
+|   |   |-- github/
+|   |   |   +-- github_client.py
+|   |   +-- utils/
+|   |       |-- storage_utils.py
+|   |       |-- commit_tracker.py
+|   |       +-- file_manager.py
+|   +-- scripts/
+|       |-- ingest_repo.py, process_repo.py
+|       |-- embed_repo.py, rag_cli.py
+|       +-- analyze_chunk_quality.py
+|
+|-- frontend/                            # Next.js UI
+|   |-- app/
+|   |   |-- api/rag/                     # SSE streaming proxies
+|   |   |-- auth/
+|   |   +-- project/
+|   |-- components/                      # 60+ React components
+|   |-- hooks/
+|   |-- context/
+|   +-- utils/
+|
+|-- Data-Pipeline/                       # MLOps pipeline (DVC)
+|   |-- scripts/
+|   |   |-- run_pipeline.py              # DVC stage runner
+|   |   +-- gantt.py                     # Bottleneck visualization
+|   |-- tests/
+|   |   |-- conftest.py
+|   |   |-- test_acquisition.py
+|   |   |-- test_preprocessing.py
+|   |   +-- test_embedder.py
+|   |-- data/
+|   |   |-- raw/
+|   |   |   +-- metadata.json
+|   |   +-- processed/
+|   |       |-- chunks.jsonl
+|   |       |-- chunks_embedded.jsonl
+|   |       |-- schema_validation.json
+|   |       |-- anomaly_detection.json
+|   |       |-- bias_detection.json
+|   |       +-- validation_report.json
+|   |-- logs/
+|   |   +-- pipeline.log
+|   |-- dvc.yaml
+|   |-- dvc.lock
+|   +-- requirements.txt
+|
+|-- deliverables/scoping/
+|-- style-checker/
++-- README.md, setup-env.sh, setup-env.bat
+```
+
+#### Service Responsibilities
+
+| Service | Purpose | Deployment |
+|---------|---------|------------|
+| **backend** | Handles authentication (GitHub OAuth), user/workspace management via Firestore, and proxies RAG requests to the ingest-service. Receives GitHub webhooks to trigger pipeline runs on push events. | Cloud Run (`us-east1`) |
+| **ingest-service** | Core pipeline engine. Ingests repos from GitHub, chunks code via Tree-sitter AST, generates embeddings via Vertex AI, runs validation, and serves all RAG endpoints (Q&A, docs generation, code completion, code editing, semantic search). | Cloud Run (`us-east1`) |
+| **frontend** | Next.js UI providing project management (board, backlog, roadmap) and an AI assistant panel that streams RAG responses
+| **Data-Pipeline** | DVC-orchestrated MLOps layer. Wraps the same production classes from `ingest-service` into a reproducible, versioned DAG for local execution, testing, and auditing. | Local (DVC) |
+
+#### How the Services Connect
+
+```
+User / GitHub Webhook
+        |
+        v
+    backend (auth + routing)
+        |
+        v
+    ingest-service (pipeline + RAG)
+        |
+        v
+    GCS (raw repos + processed chunks) <--- DVC (local reproducibility)
+        |
+        v
+    Vertex AI (embeddings) + Gemini (LLM)
+```
+
+The **backend** authenticates users and forwards requests to **ingest-service**, which runs the pipeline and serves RAG features. Both services read/write to the same GCS buckets. The **Data-Pipeline** DVC layer imports the same source classes from `ingest-service` and targets the same GCS infrastructure, providing a local reproducibility and versioning layer without duplicating code.
 
 ---
 
@@ -391,7 +514,7 @@ curl -X POST https://ingest-service-484671782718.us-east1.run.app/pipeline/code/
 
 ## 4. Testing the DVC Pipeline
 
-This section covers how to run and verify the DVC (Data Version Control) pipeline locally. This requires a local environment setup. 
+This section covers how to run and verify the DVC (Data Version Control) pipeline locally. This requires a local environment setup.
 
 ### 4.1 Clone and Setup
 
@@ -504,7 +627,7 @@ The 4 stages and their dependencies are defined in `dvc.yaml`:
 | **ingest** | `scripts/run_pipeline.py ingest` | Downloads repo files from GitHub to GCS |
 | **chunk** | `scripts/run_pipeline.py chunk` | Parses code into chunks via Tree-sitter AST |
 | **embed** | `scripts/run_pipeline.py embed` | Generates 768-dim embeddings via Vertex AI |
-| **validate** | `scripts/schema_validation.py validate` | Validates chunk schema, performs anomaly and bias detection
+| **validate** | `scripts/schema_validation.py validate` | Validates chunk schema, performs anomaly and bias detection |
 
 ### 4.5 Run the Full DVC Pipeline
 
@@ -546,7 +669,7 @@ ls data/processed/
 # Check validation reports and monitoring logs
 cat logs/pipeline.log
 cat data/processed/schema_validation.json
-cat data/processed/bias_detection.json 
+cat data/processed/bias_detection.json
 cat data/processed/anomaly_detection.json
 ```
 
@@ -563,6 +686,38 @@ dvc remote list
 cat dvc.yaml
 ```
 
+### 4.9 Data Versioning with DVC
+
+DVC tracks all pipeline inputs and outputs with content-addressable 
+hashing. After each `dvc repro`, the `dvc.lock` file records the 
+MD5 hash of every stage's dependencies and outputs. This file is 
+committed to Git, ensuring a record of exactly what data was 
+produced by each pipeline run.
+
+**DVC Remote:**
+```
+gs://otto-pm-processed-chunks/dvc-cache
+```
+
+**What Gets Versioned:**
+
+| File | Tracked By | Purpose |
+|------|-----------|---------|
+| `dvc.yaml` | Git | Pipeline DAG definition |
+| `dvc.lock` | Git | MD5 hashes of all inputs/outputs |
+| `.dvc/config` | Git | Remote storage configuration |
+| `data/raw/metadata.json` | DVC (GCS) | Ingested repository metadata |
+| `data/processed/chunks.jsonl` | DVC (GCS) | Parsed code chunks |
+| `data/processed/chunks_embedded.jsonl` | DVC (GCS) | Chunks with 768-dim embeddings |
+| `data/processed/*_detection.json` | DVC (GCS) | Validation reports |
+| `logs/pipeline.log` | DVC (GCS) | Stage-level execution log |
+
+**Key commands:**
+```bash
+dvc status    # check which stages are up-to-date
+dvc push      # upload versioned artifacts to GCS
+dvc pull      # download artifacts from GCS
+```
 ---
 
 ## 5. Running the Test Suite (69 Tests)
@@ -733,7 +888,7 @@ otto-pm-processed-chunks/
 | Vector Search | In-memory cosine similarity | Threshold > 0.6 |
 | Object Storage | Google Cloud Storage | Two buckets (raw + processed) |
 | Database | Firestore | User data, webhooks, workspaces |
-| Pipeline Tracking | DVC | 6-stage pipeline, GCS remote |
+| Pipeline Tracking | DVC | 4-stage pipeline, GCS remote |
 | Testing | pytest | 69 tests, mocked fixtures |
 | Python | 3.11 | Required version |
 
