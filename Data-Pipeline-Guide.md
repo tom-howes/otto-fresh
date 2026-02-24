@@ -805,14 +805,14 @@ airflow scheduler
 **Via the UI:**
 1. Open `http://localhost:8080`
 2. Log in with `admin` / `admin`
-3. Toggle `otto_data_pipeline` to unpause (switch on the left)
+3. Toggle `airflow_dag` to unpause (switch on the left)
 4. Click the play button (▶) → **Trigger DAG**
 
 **Via CLI (third terminal):**
 ```bash
 source airflow-venv/bin/activate
 export AIRFLOW_HOME=$(pwd)
-airflow dags trigger otto_data_pipeline
+airflow dags trigger airflow_dag
 ```
 
 #### DAG Structure
