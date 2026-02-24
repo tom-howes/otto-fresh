@@ -723,6 +723,8 @@ An Airflow DAG is provided in `dags/otto_pipeline_dag.py` that orchestrates the 
 
 > **Note:** Airflow must be installed in a separate virtual environment due to transitive dependency conflicts with the pipeline's Google Cloud libraries. This is standard practice — Airflow's own documentation recommends isolated installation.
 
+> **Windows Users:** Airflow does not natively support Windows. If you are on Windows, use [WSL (Windows Subsystem for Linux)](https://learn.microsoft.com/en-us/windows/wsl/install) and follow the macOS/Linux instructions below.
+
 #### Setup
 
 ```bash
@@ -730,33 +732,13 @@ cd otto/Data-Pipeline
 
 # Create a separate venv for Airflow
 python3.11 -m venv airflow-venv
-```
-
-Activate the venv:
-
-**macOS/Linux:**
-```bash
 source airflow-venv/bin/activate
-```
 
-**Windows (PowerShell):**
-```powershell
-.\airflow-venv\Scripts\Activate.ps1
-```
-
-**Windows (CMD):**
-```cmd
-airflow-venv\Scripts\activate.bat
-```
-
-Then install Airflow and pipeline dependencies:
-
-```bash
 # Install Airflow with constraints (prevents dependency conflicts)
 pip install "apache-airflow==2.10.4" \
   --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.10.4/constraints-3.11.txt"
 
-# IMPORTANT: There is an error that will appear regarding protobuf, 
+# IMPORTANT: There is an error that will appear regarding protobuf,
 # this is not breaking and will still allow running airflow.
 
 # Install pipeline dependencies on top
@@ -768,7 +750,6 @@ pip install google-cloud-storage==2.18.2 google-cloud-aiplatform==1.72.0 \
 
 #### Initialize Airflow
 
-**macOS/Linux:**
 ```bash
 export AIRFLOW_HOME=$(pwd)
 export AIRFLOW__CORE__DAGS_FOLDER=$(pwd)/dags
@@ -782,36 +763,10 @@ airflow users create \
   --role Admin --email admin@test.com
 ```
 
-**Windows (PowerShell):**
-```powershell
-$env:AIRFLOW_HOME=(Get-Location).Path
-$env:AIRFLOW__CORE__DAGS_FOLDER="$($env:AIRFLOW_HOME)\dags"
-$env:AIRFLOW__CORE__LOAD_EXAMPLES="False"
-
-airflow db init
-
-airflow users create `
-  --username admin --password admin `
-  --firstname Otto --lastname Admin `
-  --role Admin --email admin@test.com
-```
-
-**Windows (CMD):**
-```cmd
-set AIRFLOW_HOME=%cd%
-set AIRFLOW__CORE__DAGS_FOLDER=%cd%\dags
-set AIRFLOW__CORE__LOAD_EXAMPLES=False
-
-airflow db init
-
-airflow users create --username admin --password admin --firstname Otto --lastname Admin --role Admin --email admin@test.com
-```
-
 #### Set Environment Variables
 
-The Airflow scheduler must have access to the same environment variables used by the pipeline. Set these **before** starting the scheduler.
+The Airflow scheduler must have access to the same environment variables used by the pipeline. Set these **before** starting the scheduler:
 
-**macOS/Linux:**
 ```bash
 export GITHUB_TOKEN="YOUR_GITHUB_TOKEN"
 export GCP_PROJECT_ID="otto-pm"
@@ -822,35 +777,11 @@ export OTTO_REPO="otto-pm/otto"
 export GOOGLE_APPLICATION_CREDENTIALS="sa-key.json"
 ```
 
-**Windows (PowerShell):**
-```powershell
-$env:GITHUB_TOKEN="YOUR_GITHUB_TOKEN"
-$env:GCP_PROJECT_ID="otto-pm"
-$env:GCS_BUCKET_RAW="otto-pm-raw-repos"
-$env:GCS_BUCKET_PROCESSED="otto-pm-processed-chunks"
-$env:VERTEX_LOCATION="us-east1"
-$env:OTTO_REPO="otto-pm/otto"
-$env:GOOGLE_APPLICATION_CREDENTIALS="sa-key.json"
-```
-
-**Windows (CMD):**
-```cmd
-set GITHUB_TOKEN=YOUR_GITHUB_TOKEN
-set GCP_PROJECT_ID=otto-pm
-set GCS_BUCKET_RAW=otto-pm-raw-repos
-set GCS_BUCKET_PROCESSED=otto-pm-processed-chunks
-set VERTEX_LOCATION=us-east1
-set OTTO_REPO=otto-pm/otto
-set GOOGLE_APPLICATION_CREDENTIALS=sa-key.json
-```
-
 #### Start Airflow (two terminals)
 
 Both terminals must activate the airflow-venv, set `AIRFLOW_HOME`, and have the pipeline environment variables set.
 
 **Terminal 1 — Webserver:**
-
-macOS/Linux:
 ```bash
 cd otto/Data-Pipeline
 source airflow-venv/bin/activate
@@ -858,17 +789,7 @@ export AIRFLOW_HOME=$(pwd)
 airflow webserver --port 8080
 ```
 
-Windows (PowerShell):
-```powershell
-cd otto\Data-Pipeline
-.\airflow-venv\Scripts\Activate.ps1
-$env:AIRFLOW_HOME=(Get-Location).Path
-airflow webserver --port 8080
-```
-
 **Terminal 2 — Scheduler:**
-
-macOS/Linux:
 ```bash
 cd otto/Data-Pipeline
 source airflow-venv/bin/activate
@@ -876,17 +797,6 @@ export AIRFLOW_HOME=$(pwd)
 export AIRFLOW__CORE__DAGS_FOLDER=$(pwd)/dags
 export AIRFLOW__CORE__LOAD_EXAMPLES=False
 # Set all pipeline env vars here (GITHUB_TOKEN, GCP_PROJECT_ID, etc.)
-airflow scheduler
-```
-
-Windows (PowerShell):
-```powershell
-cd otto\Data-Pipeline
-.\airflow-venv\Scripts\Activate.ps1
-$env:AIRFLOW_HOME=(Get-Location).Path
-$env:AIRFLOW__CORE__DAGS_FOLDER="$($env:AIRFLOW_HOME)\dags"
-$env:AIRFLOW__CORE__LOAD_EXAMPLES="False"
-# Set all pipeline env vars here ($env:GITHUB_TOKEN, etc.)
 airflow scheduler
 ```
 
@@ -899,18 +809,9 @@ airflow scheduler
 4. Click the play button (▶) → **Trigger DAG**
 
 **Via CLI (third terminal):**
-
-macOS/Linux:
 ```bash
 source airflow-venv/bin/activate
 export AIRFLOW_HOME=$(pwd)
-airflow dags trigger otto_data_pipeline
-```
-
-Windows (PowerShell):
-```powershell
-.\airflow-venv\Scripts\Activate.ps1
-$env:AIRFLOW_HOME=(Get-Location).Path
 airflow dags trigger otto_data_pipeline
 ```
 
