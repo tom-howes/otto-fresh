@@ -9,3 +9,14 @@
 2026-02-22 18:51:21,467 [INFO]   Total chunks:       387
 2026-02-22 18:51:21,467 [INFO]   Missing embeddings: 0
 2026-02-22 18:51:21,467 [INFO]   Missing content:    0
+2026-02-23 23:25:36,732 [INFO] Ingesting otto-pm/otto...
+2026-02-23 23:26:55,286 [INFO] Ingested 220 files @ d4633222
+2026-02-23 23:26:56,720 [INFO] Chunking otto-pm/otto...
+2026-02-23 23:27:23,615 [INFO] Chunked: 394 chunks
+2026-02-23 23:27:24,840 [INFO] Embedding otto-pm/otto...
+2026-02-23 23:29:31,300 [INFO] Embedded: 394 chunks
+2026-02-23 23:29:31,779 [INFO] Validating chunks...
+2026-02-23 23:29:31,851 [INFO] Validation: PASS
+2026-02-23 23:29:31,851 [INFO]   Total chunks:       394
+2026-02-23 23:29:31,851 [INFO]   Missing embeddings: 0
+2026-02-23 23:29:31,851 [INFO]   Missing content:    0
