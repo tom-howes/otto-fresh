@@ -53,4 +53,5 @@ htmlcov/
 
 # ==== Misc ====
 *.bak
-*.tmp
+*.tmpcredentials/
+sa-key.json
