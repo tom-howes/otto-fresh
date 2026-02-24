@@ -410,22 +410,57 @@ pip install -r requirements.txt
 
 > **Important:** Always use `python -m pytest` and `python -m dvc` to ensure the venv Python is used, not your system/Anaconda Python.
 
-### 4.2 Adding the Google Cloud Security Account Key
+### 4.2 Authenticating the Google Cloud Security Account
 
 1. A service account key will be provided with this submission named sa-key.json. Add this here: `otto/Data-Pipeline/sa-key.json`
-2. Login with google cloud `gcloud auth login`
-3. Authenticate using the service account key `gcloud auth activate-service-account --key-file=sa-key.json`
-4. Run `export GOOGLE_APPLICATION_CREDENTIALS="credentials/sa-key.json"`
-5. Set otto-pm as the project `gcloud config set project otto-pm`
+2. Activate service account `gcloud auth activate-service-account --key-file=sa-key.json`
+3. Set otto-pm as the project `gcloud config set project otto-pm`
+4. Set the credentials for Python libraries:
+
+   **macOS/Linux:**
+```bash
+   export GOOGLE_APPLICATION_CREDENTIALS="sa-key.json"
+```
+
+   **Windows (PowerShell):**
+```powershell
+   $env:GOOGLE_APPLICATION_CREDENTIALS="sa-key.json"
+```
+
+   **Windows (CMD):**
+```cmd
+   set GOOGLE_APPLICATION_CREDENTIALS=sa-key.json
+```
 
 ### 4.3 Set Environment Variables
 
+Replace `YOUR_GITHUB_TOKEN` with your personal access token.
+
+**macOS/Linux:**
 ```bash
 export GITHUB_TOKEN="YOUR_GITHUB_TOKEN"
 export GCP_PROJECT_ID="otto-pm"
 export GCS_BUCKET_RAW="otto-pm-raw-repos"
 export GCS_BUCKET_PROCESSED="otto-pm-processed-chunks"
 export VERTEX_LOCATION="us-east1"
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:GITHUB_TOKEN="YOUR_GITHUB_TOKEN"
+$env:GCP_PROJECT_ID="otto-pm"
+$env:GCS_BUCKET_RAW="otto-pm-raw-repos"
+$env:GCS_BUCKET_PROCESSED="otto-pm-processed-chunks"
+$env:VERTEX_LOCATION="us-east1"
+```
+
+**Windows (CMD):**
+```cmd
+set GITHUB_TOKEN=YOUR_GITHUB_TOKEN
+set GCP_PROJECT_ID=otto-pm
+set GCS_BUCKET_RAW=otto-pm-raw-repos
+set GCS_BUCKET_PROCESSED=otto-pm-processed-chunks
+set VERTEX_LOCATION=us-east1
 ```
 
 ### 4.4 View the Pipeline DAG
@@ -474,7 +509,7 @@ The 4 stages and their dependencies are defined in `dvc.yaml`:
 ### 4.5 Run the Full DVC Pipeline
 
 ```bash
-dvc repro
+dvc repro -f
 ```
 
 This executes all 4 stages in dependency order. DVC tracks inputs and outputs and only reruns stages whose dependencies have changed. Anomaly, schema, and bias validation are all included in the validation step.
