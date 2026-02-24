@@ -16,11 +16,15 @@ def check_directory(directory):
 
     EXCLUDE_DIRS = {"venv", ".venv", "env", ".env", "node_modules",
                     "__pycache__", ".git", ".tox", "site-packages",
-                    ".eggs", "dist", "build", ".mypy_cache"}
+                    ".eggs", "dist", "build", ".mypy_cache",
+                    "airflow-venv"}
+
+    EXCLUDE_FILES = {"webserver_config.py"}
 
     py_files = sorted(
         f for f in dir_path.rglob("*.py")
         if not any(excluded in f.parts for excluded in EXCLUDE_DIRS)
+        and f.name not in EXCLUDE_FILES
     )
 
     if not py_files:
