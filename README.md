@@ -90,66 +90,104 @@ User Query → Backend (auth) → Ingest Service → Vector Search → Gemini �
 ## Project Structure
 ```
 otto/
-├── frontend/                  # Next.js web application
-│   ├── src/
-│   ├── package.json
-│   └── ...
+├── Data-Pipeline                # MLOps pipeline (DVC orchestration)
+│   ├── data
+│   │   ├── processed            # Chunks, embeddings, validation reports
+│   │   └── raw                  # Ingested repo metadata
+│   ├── logs                     # Pipeline execution logs
+│   ├── scripts                  # DVC stage runner + Gantt chart generator
+│   └── tests                    # 69 pytest tests (acquisition, preprocessing, embedding)
 │
-├── backend/                   # Backend API service
-│   ├── app/
-│   │   ├── main.py           # FastAPI app entry point
-│   │   ├── config.py         # Environment configuration
-│   │   ├── routes/
-│   │   │   ├── auth.py       # GitHub OAuth + session management
-│   │   │   ├── github.py     # GitHub App installation routes
-│   │   │   ├── user.py       # User profile routes
-│   │   │   ├── rag.py        # RAG endpoints (proxies to ingest service)
-│   │   │   └── webhook.py    # GitHub webhook handler
-│   │   ├── clients/
-│   │   │   ├── github.py     # GitHub API client (App + OAuth)
-│   │   │   ├── firebase.py   # Firestore client
-│   │   │   └── ingest_service.py  # HTTP client for ingest service
-│   │   ├── dependencies/
-│   │   │   └── auth.py       # JWT auth dependency
-│   │   ├── models/           # Pydantic models
-│   │   ├── services/         # Business logic
-│   │   ├── types/            # Type definitions
-│   │   └── utils/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── .gcloudignore
+├── backend                      # FastAPI auth + orchestration service
+│   ├── app
+│   │   ├── clients              # HTTP clients (Firebase, GitHub, ingest-service)
+│   │   ├── dependencies         # JWT auth middleware
+│   │   ├── models               # Pydantic models (user, issue, jwt, workspace)
+│   │   ├── routes               # auth, github, rag, user, webhook endpoints
+│   │   ├── services             # Business logic (user, workspace management)
+│   │   └── utils                # Auth helpers
+│   └── docs
+│       └── api                  # Auto-generated API documentation
 │
-├── ingest-service/            # RAG pipeline service
-│   ├── app/
-│   │   ├── main.py           # FastAPI app entry point
-│   │   └── routes/
-│   │       └── pipeline.py   # Pipeline + RAG endpoints
-│   ├── src/
-│   │   ├── ingestion/
-│   │   │   └── github_ingester.py    # GitHub repo → GCS
-│   │   ├── chunking/
-│   │   │   ├── enhanced_chunker.py   # Semantic code chunking
-│   │   │   ├── embedder.py           # Vertex AI embeddings
-│   │   │   └── chunker.py           # Basic chunker
-│   │   ├── rag/
-│   │   │   ├── rag_services.py       # Q&A, Docs, Completion, Editing
-│   │   │   ├── vector_search.py      # Semantic similarity search
-│   │   │   └── llm_client_gemini_api.py  # Gemini API client
-│   │   ├── github/
-│   │   │   └── github_client.py      # GitHub push/PR operations
-│   │   └── utils/
-│   │       ├── storage_utils.py      # Multi-tenant storage paths
-│   │       ├── commit_tracker.py     # Commit tracking for caching
-│   │       └── file_manager.py       # Local file management
-│   ├── scripts/              # CLI tools for manual pipeline runs
-│   ├── Dockerfile
-│   └── requirements.txt
+├── deliverables
+│   └── scoping                  # Project scoping + user needs documents
 │
-├── .env                      # Shared environment variables
-├── setup-env.sh             # Mac/Linux setup script
-├── setup-env.bat            # Windows setup script
+├── frontend                     # Next.js 14 web application
+│   ├── app
+│   │   ├── api
+│   │   │   └── rag              # SSE streaming proxies
+│   │   │       ├── ask
+│   │   │       │   └── stream
+│   │   │       ├── code
+│   │   │       │   └── edit
+│   │   │       │       └── stream
+│   │   │       └── docs
+│   │   │           └── generate
+│   │   │               └── stream
+│   │   ├── auth
+│   │   │   ├── callback         # GitHub OAuth callback
+│   │   │   └── install          # GitHub App installation
+│   │   └── project
+│   │       ├── backlog          # Sprint backlog view
+│   │       ├── board            # Kanban board view
+│   │       └── roadmap          # Roadmap / epics view
+│   ├── assets
+│   │   └── readme               # README screenshots and images
+│   ├── components               # 60+ React components
+│   │   ├── auth                 # Auth token handling
+│   │   ├── backlog              # Backlog list + sprint grouping
+│   │   ├── board                # Kanban board columns + cards
+│   │   ├── form                 # Reusable form fields
+│   │   ├── issue                # Issue CRUD + details
+│   │   │   └── issue-details
+│   │   │       └── issue-details-info
+│   │   ├── modals               # Dialog modals
+│   │   │   ├── alert
+│   │   │   ├── auth
+│   │   │   ├── board-issue-details
+│   │   │   ├── complete-sprint
+│   │   │   │   └── form
+│   │   │   │       └── fields
+│   │   │   ├── start-sprint
+│   │   │   │   └── form
+│   │   │   │       └── fields
+│   │   │   └── update-sprint
+│   │   │       └── form
+│   │   │           └── fields
+│   │   ├── otto-agent           # AI assistant panel
+│   │   ├── roadmap              # Epics table + roadmap header
+│   │   ├── text-editor          # Lexical rich text editor
+│   │   │   ├── context
+│   │   │   ├── plugins
+│   │   │   ├── theme
+│   │   │   └── ui
+│   │   └── ui                   # Shared UI primitives (buttons, modals, tooltips)
+│   ├── config                   # Site configuration
+│   ├── context                  # React context providers (auth, filters, issues)
+│   ├── hooks                    # Custom React hooks
+│   │   └── query-hooks
+│   │       └── use-issues       # Issue CRUD hooks
+│   ├── styles                   # Global CSS + split pane styles
+│   └── utils
+│       └── api                  # API client + endpoint helpers
+│
+├── ingest-service               # Core pipeline + RAG service
+│   ├── app
+│   │   └── routes               # Pipeline + RAG endpoints (pipeline.py)
+│   ├── scripts                  # CLI tools (ingest, embed, RAG CLI)
+│   └── src
+│       ├── chunking             # Tree-sitter parsing + Vertex AI embeddings
+│       ├── github               # GitHub push/PR operations
+│       ├── ingestion            # GitHub repo → GCS ingestion
+│       ├── rag                  # Q&A, docs, completion, editing, vector search
+│       ├── utils                # Storage paths, commit tracking, file management
+│       └── validation           # Schema validation, anomaly + bias detection
+│
+└── style-checker                # PEP8 style checking utilities
+├── Data-Pipeline-Guide.md           # Comprehensive pipeline testing guide
 ├── README.md
-└── requirements.txt         # Root-level dependencies
+├── setup-env.sh, setup-env.bat      # Environment setup scripts
+└── requirements.txt
 ```
 
 ---
@@ -226,6 +264,22 @@ gsutil mb -p otto-pm -l us-central1 gs://otto-processed-chunks
 ## Data Version Control (DVC)
 
 We use DVC to track large data files and models. Data is stored in Google Cloud Storage.
+
+## Data Pipeline Guide
+
+For detailed instructions on running and testing the data pipeline (required for the MLOps deliverable), see:
+
+**[Data-Pipeline-Guide.md](./Data-Pipeline-Guide.md)**
+
+This guide covers:
+- **Environment setup** — Python 3.11 venv, GCP authentication, environment variables (cross-platform)
+- **Running the deployed pipeline** — `curl` commands for all endpoints (ingest, chunk, embed, RAG, search, docs, code editing)
+- **Running the DVC pipeline locally** — `dvc dag`, `dvc repro`, stage-by-stage execution
+- **Code structure** — Repository layout, service responsibilities, architecture diagram
+- **Test suite** — 69 pytest tests across 3 modules
+- **Data validation** — Schema validation, anomaly detection, bias detection
+- **Reproducibility & data versioning** — `dvc.lock` hashing, `dvc push/pull`, reproducing previous runs
+
 
 ### First-time setup
 
