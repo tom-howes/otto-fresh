@@ -7,11 +7,10 @@ import { FaGithub } from "react-icons/fa";
 const API_BASE = "/api";
 
 const InstallPage = () => {
-  const { refetchUser, refetchWorkspaces, isAuthenticated } = useAuth();
+  const { refetchUser, refetchWorkspaces } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    // Re-fetch user in case cookie just got set
     const init = async () => {
       await refetchUser();
       await refetchWorkspaces();
@@ -52,7 +51,7 @@ const InstallPage = () => {
           onClick={handleSkip}
           className="mt-3 w-full rounded-lg px-4 py-2.5 text-sm text-gray-500 hover:bg-gray-50"
         >
-          Skip for now
+          Skip for now    
         </button>
       </div>
     </div>

@@ -1,12 +1,13 @@
 # backend/app/routes/auth.py
 """
-Authentication routes with Firestore-backed webhook sessions and login-time repo sync
+Authentication routes with Firestore-backed
+webhook sessions and login-time repo sync
 """
 from fastapi import APIRouter, Request, HTTPException, status, BackgroundTasks
 from fastapi.responses import RedirectResponse, JSONResponse
 from app.utils.auth import generate_session_token
 from app.services.user import get_user_by_id, create_user, update_user
-from app.routes.webhook import register_active_user, unregister_active_user  # Now async
+from app.routes.webhook import register_active_user, unregister_active_user
 from app.dependencies.auth import get_current_user
 import secrets
 from datetime import datetime
@@ -20,11 +21,13 @@ import os
 import json
 from app.models import UserUpdate, UserCreate
 from app.models import UserId, OAuthState, OAuthCode, JWT, InstallationId
+from typing import Optional
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.get("/login", status_code=status.HTTP_307_TEMPORARY_REDIRECT, tags=["Authentication"])
+@router.get("/login", status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+            tags=["Authentication"])
 async def login() -> RedirectResponse:
     """Initiate GitHub OAuth flow."""
     state: OAuthState = secrets.token_urlsafe(16)
@@ -45,27 +48,24 @@ async def sync_user_repos_on_login(user_id: str, github_token: str):
     """
     Background task: Check all repos THIS USER has previously indexed.
     If any have new commits on GitHub, sync them automatically.
-    
-    Only checks repos in user's access history - doesn't load new repos.
     """
     from app.clients.ingest_service import IngestServiceClient
     from google.cloud import storage
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"🔄 LOGIN SYNC: Checking user {user_id}'s repos")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     try:
         client = storage.Client(project=os.getenv("GCP_PROJECT_ID", "otto-pm"))
-        bucket = client.bucket(os.getenv("GCS_BUCKET_PROCESSED", "otto-pm-processed-chunks"))
+        bucket = client.bucket(
+            os.getenv("GCS_BUCKET_PROCESSED", "otto-pm-processed-chunks"))
 
-        # Get repos THIS USER has previously accessed
         prefix = f"user_data/{user_id}/repos/"
         all_blobs = list(bucket.list_blobs(prefix=prefix))
 
         repos_to_check = set()
         for blob in all_blobs:
-            # user_data/{user_id}/repos/{owner}/{repo}/access_info.json
             parts = blob.name.split('/')
             if len(parts) >= 6 and parts[5] == 'access_info.json':
                 repo_full_name = f"{parts[3]}/{parts[4]}"
@@ -87,12 +87,12 @@ async def sync_user_repos_on_login(user_id: str, github_token: str):
 
         for repo_name in repos_to_check:
             try:
-                # Get current commit on GitHub
                 gh_repo = gh.get_repo(repo_name)
-                current_sha = gh_repo.get_branch(gh_repo.default_branch).commit.sha
+                current_sha = gh_repo.get_branch(
+                    gh_repo.default_branch).commit.sha
 
-                # Get last processed commit from shared storage
-                commit_blob = bucket.blob(f"repos/{repo_name}/commit_info.json")
+                commit_blob = bucket.blob(
+                    f"repos/{repo_name}/commit_info.json")
 
                 if commit_blob.exists():
                     commit_info = json.loads(commit_blob.download_as_text())
@@ -101,8 +101,6 @@ async def sync_user_repos_on_login(user_id: str, github_token: str):
                     if last_sha != current_sha:
                         print(f"\n   🔄 {repo_name}: New commits detected")
                         print(f"      {last_sha[:8]} → {current_sha[:8]}")
-
-                        # Run sync
                         try:
                             await ingest.run_full_pipeline(
                                 repo_full_name=repo_name,
@@ -115,10 +113,11 @@ async def sync_user_repos_on_login(user_id: str, github_token: str):
                         except Exception as e:
                             print(f"      ❌ Failed to update {repo_name}: {e}")
                     else:
-                        print(f"   ✓ {repo_name}: Already up to date ({current_sha[:8]})")
+                        print(
+                            f"   ✓ {repo_name}: Already up to date ({current_sha[:8]})")
                 else:
-                    # Repo in user history but no commit info? Re-index it
-                    print(f"\n   ⚠️  {repo_name}: In user history but no commit info - re-indexing")
+                    print(
+                        f"\n   ⚠️  {repo_name}: In user history but no commit info - re-indexing")
                     try:
                         await ingest.run_full_pipeline(
                             repo_full_name=repo_name,
@@ -134,11 +133,11 @@ async def sync_user_repos_on_login(user_id: str, github_token: str):
             except Exception as e:
                 print(f"   ⚠️  Could not check {repo_name}: {e}")
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"✅ LOGIN SYNC COMPLETE")
         print(f"   Checked: {len(repos_to_check)} repos")
         print(f"   Updated: {updates_queued} repos")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
     except Exception as e:
         print(f"\n❌ LOGIN SYNC FAILED: {e}")
@@ -150,20 +149,48 @@ async def sync_user_repos_on_login(user_id: str, github_token: str):
 async def github_callback(
     request: Request,
     background_tasks: BackgroundTasks,
-    code: OAuthCode,
-    state: OAuthState | None = None,
-    installation_id: InstallationId | None = None,
-    setup_action: str | None = None
+    code: Optional[OAuthCode] = None,
+    state: Optional[OAuthState] = None,
+    installation_id: Optional[InstallationId] = None,
+    setup_action: Optional[str] = None
 ) -> RedirectResponse:
 
-    print(f"\n{'='*60}")
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+    print(f"\n{'=' * 60}")
     print(f"📥 GitHub Callback Received")
-    print(f"{'='*60}")
-    print(f"Code: {code[:20]}...")
+    print(f"{'=' * 60}")
+    print(f"Code: {code[:20] if code else 'None'}...")
     print(f"State: {state}")
     print(f"Installation ID: {installation_id}")
-    print(f"{'='*60}\n")
+    print(f"Setup Action: {setup_action}")
+    print(f"{'=' * 60}\n")
 
+    # ---------------------------------------------------------------
+    # Case: Post-install redirect with no code (user already logged in)
+    # GitHub redirects here after app installation when OAuth is enabled
+    # but user already has a session cookie.
+    # ---------------------------------------------------------------
+    if not code and installation_id and setup_action == "install":
+        print("📦 Post-install redirect (no code) — saving installation_id")
+        try:
+            session_token = request.cookies.get("session_token")
+            if session_token:
+                from app.utils.auth import validate_session_token
+                decoded = validate_session_token(session_token)
+                update_data = UserUpdate(installation_id=installation_id)
+                await update_user(decoded["sub"], update_data)
+                print(
+                    f"✓ Saved installation_id {installation_id} for user {decoded['sub']}")
+            else:
+                print("⚠️  No session cookie found — cannot save installation_id")
+        except Exception as e:
+            print(f"⚠️  Could not save installation_id: {e}")
+        return RedirectResponse(f"{frontend_url}/project/backlog")
+
+    # ---------------------------------------------------------------
+    # Case: Normal OAuth flow — code is required
+    # ---------------------------------------------------------------
     if not code:
         print("❌ No authorization code")
         raise HTTPException(
@@ -178,9 +205,7 @@ async def github_callback(
         print(f"   state (param):         {state}")
 
         state_valid = (
-            # Ideal case: cookie round-trip worked
             (stored_state and state and stored_state == state)
-            # Dev fallback: cookie missing but state param present and non-trivial
             or (state and len(state) >= 8)
         )
 
@@ -203,7 +228,8 @@ async def github_callback(
         print(f"✓ Got profile for: {user_profile.get('login')}")
 
     except GitHubAPIError as e:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=e.message)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=e.message)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -224,7 +250,8 @@ async def github_callback(
                 installation_id=installation_id if installation_id else None
             )
             await update_user(user_id, update_data)
-            has_installation = installation_id or existing_user.get("installation_id")
+            has_installation = installation_id or existing_user.get(
+                "installation_id")
         else:
             new_user = UserCreate(
                 id=user_id,
@@ -251,10 +278,9 @@ async def github_callback(
     print("\n📝 Step 4: Generating session token...")
     session_token: JWT = generate_session_token(user_id)
 
-    # ===== Register user for webhook processing (ASYNC - uses Firestore) =====
     print("\n📝 Step 5: Registering user for webhook processing in Firestore...")
     try:
-        await register_active_user(  # ✅ Now awaited - saves to Firestore
+        await register_active_user(
             user_id=user_id,
             github_username=user_profile["login"],
             github_access_token=token_object["access_token"],
@@ -263,9 +289,7 @@ async def github_callback(
         print(f"✓ User registered for webhooks: {user_profile['login']}")
     except Exception as e:
         print(f"⚠️  Failed to register for webhooks: {e}")
-        # Don't fail the whole login if webhook registration fails
 
-    # Check for PREVIOUSLY INDEXED repos that need updates
     print("\n📝 Step 6: Checking user's previously indexed repos for updates...")
     background_tasks.add_task(
         sync_user_repos_on_login,
@@ -274,18 +298,14 @@ async def github_callback(
     )
     print("✓ Queued background sync for user's repos")
 
-    # Determine redirect URL
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-    
+    # Determine redirect — pass token so frontend can set cookie
     if has_installation:
-        # User has GitHub App installed - go to dashboard
-        redirect_url = f"{frontend_url}/dashboard"
+        redirect_url = f"{frontend_url}/project/backlog?token={session_token}"
     else:
-        # User needs to install GitHub App
-        redirect_url = f"{frontend_url}/install"
+        redirect_url = f"{frontend_url}/auth/install?token={session_token}"
 
     print(f"\n📝 Step 7: Redirecting to: {redirect_url}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     response = RedirectResponse(redirect_url)
     response.delete_cookie("oauth_state")
@@ -296,16 +316,15 @@ async def github_callback(
         httponly=True,
         secure=False,  # Set to True in production with HTTPS
         samesite="lax",
-        domain=None  # Uses current domain
+        domain=None
     )
     return response
 
 
-@router.post("/logout", status_code=status.HTTP_200_OK, tags=["Authentication"])
+@router.post("/logout", status_code=status.HTTP_200_OK,
+             tags=["Authentication"])
 async def logout(request: Request) -> JSONResponse:
-    """Log out the current user by clearing session and webhook registration."""
-    
-    # ===== Unregister from webhooks (ASYNC - removes from Firestore) =====
+    """Log out by clearing session and webhook registration."""
     try:
         session_token = request.cookies.get("session_token")
         if session_token:
@@ -313,8 +332,9 @@ async def logout(request: Request) -> JSONResponse:
             decoded = validate_session_token(session_token)
             user = await get_user_by_id(decoded["sub"])
             if user:
-                await unregister_active_user(user.get("github_username", ""))  # ✅ Now awaited
-                print(f"✓ Unregistered from webhooks: {user.get('github_username')}")
+                await unregister_active_user(user.get("github_username", ""))
+                print(
+                    f"✓ Unregistered from webhooks: {user.get('github_username')}")
     except Exception as e:
         print(f"⚠️  Could not unregister webhook session: {e}")
 
