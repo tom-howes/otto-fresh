@@ -17,14 +17,15 @@ class GitHubClient:
         self.github = Github(self.github_token)
         print("✓ GitHub client initialized")
 
-    def get_file_content(self, repo_path: str, file_path: str) -> Optional[str]:
+    def get_file_content(self, repo_path: str,
+                         file_path: str) -> Optional[str]:
         """
         Fetch current content of a file from GitHub default branch.
-        
+
         Args:
             repo_path: Repository path (owner/repo)
             file_path: Path to file in repo
-            
+
         Returns:
             File content as string, or None if not found
         """
@@ -51,19 +52,22 @@ class GitHubClient:
             print(f"✓ Repository found: {repo.full_name}")
 
             if not repo.permissions.push:
-                return {'success': False, 'error': 'No push permissions for this repository'}
+                return {'success': False,
+                        'error': 'No push permissions for this repository'}
 
             if not branch_name:
                 timestamp = int(time.time())
                 safe_instruction = instruction.lower()[:30].replace(" ", "-")
-                safe_instruction = "".join(c for c in safe_instruction if c.isalnum() or c == "-")
+                safe_instruction = "".join(
+                    c for c in safe_instruction if c.isalnum() or c == "-")
                 branch_name = f"otto-edit-{safe_instruction}-{timestamp}"
 
             print(f"📌 Branch name: {branch_name}")
 
             default_branch = repo.default_branch
             source_branch = repo.get_branch(default_branch)
-            print(f"✓ Base branch: {default_branch} (SHA: {source_branch.commit.sha[:8]})")
+            print(
+                f"✓ Base branch: {default_branch} (SHA: {source_branch.commit.sha[:8]})")
 
             try:
                 repo.create_git_ref(
@@ -77,10 +81,13 @@ class GitHubClient:
                 else:
                     raise
 
-            commit_message = f"Otto AI Edit: {instruction}\n\nAutomated code modification by Otto AI assistant."
+            commit_message = (
+                f"Otto AI Edit: {instruction}\n\nAutomated code modification by Otto AI assistant."
+            )
 
             try:
-                file_contents = repo.get_contents(file_path, ref=default_branch)
+                file_contents = repo.get_contents(
+                    file_path, ref=default_branch)
                 print(f"✓ Found existing file: {file_path}")
                 result = repo.update_file(
                     path=file_path,
@@ -151,7 +158,8 @@ class GitHubClient:
 
             except GithubException as e:
                 if e.status == 422:
-                    existing_prs = repo.get_pulls(state='open', head=f"{repo.owner.login}:{branch_name}")
+                    existing_prs = repo.get_pulls(
+                        state='open', head=f"{repo.owner.login}:{branch_name}")
                     pr_list = list(existing_prs)
                     if pr_list:
                         existing_pr = pr_list[0]
@@ -170,13 +178,19 @@ class GitHubClient:
                             'branch': branch_name,
                             'commit_sha': result['commit'].sha,
                             'pr_url': None,
-                            'message': f'Changes committed to branch {branch_name}, but PR creation failed'
+                            'message': (
+                                f"Changes committed to branch {branch_name},"
+                                f" but PR creation failed"
+                            )
                         }
                 else:
                     raise
 
         except GithubException as e:
-            error_msg = f"GitHub API error: {e.data.get('message', str(e)) if hasattr(e, 'data') else str(e)}"
+            error_msg = (
+                f"GitHub API error: "
+                f"{e.data.get('message', str(e)) if hasattr(e, 'data') else str(e)}"
+            )
             print(f"❌ {error_msg}")
             return {'success': False, 'error': error_msg}
         except Exception as e:
@@ -184,8 +198,8 @@ class GitHubClient:
             return {'success': False, 'error': str(e)}
 
     def push_documentation(self, repo_path: str, doc_content: str,
-                          doc_name: str, doc_type: str = 'api',
-                          create_pr: bool = True) -> Dict:
+                           doc_name: str, doc_type: str = 'api',
+                           create_pr: bool = True) -> Dict:
         try:
             if repo_path.startswith('repos/'):
                 repo_path = repo_path.replace('repos/', '')
@@ -195,7 +209,8 @@ class GitHubClient:
                 file_path = 'README.md'
             else:
                 safe_name = doc_name.lower().replace(" ", "-")
-                safe_name = "".join(c for c in safe_name if c.isalnum() or c in ["-", "_"])
+                safe_name = "".join(
+                    c for c in safe_name if c.isalnum() or c in ["-", "_"])
                 file_path = f"docs/{doc_type}/{safe_name}.md"
 
             print(f"📄 Documentation path: {file_path}")
@@ -210,7 +225,8 @@ class GitHubClient:
             print(f"❌ Error pushing documentation: {e}")
             return {'success': False, 'error': str(e)}
 
-    def _extract_change_summary(self, content: str, max_lines: int = 10) -> str:
+    def _extract_change_summary(self, content: str,
+                                max_lines: int = 10) -> str:
         lines = content.split('\n')
         if len(lines) <= max_lines:
             return f"```\n{content}\n```"

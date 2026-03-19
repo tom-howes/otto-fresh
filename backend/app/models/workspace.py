@@ -1,9 +1,10 @@
 from app.models.base import BaseModel, datetime
 from app.models.github import UserId, GitHubRepo
-from typing import TypeAlias
+from typing_extensions import TypeAlias
 
 WorkspaceId: TypeAlias = str
 """Unique identifier for a workspace."""
+
 
 class Workspace(BaseModel):
     """Complete workspace data returned from the API.

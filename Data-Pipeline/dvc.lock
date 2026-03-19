@@ -1,0 +1,74 @@
+schema: '2.0'
+stages:
+  ingest:
+    cmd: python scripts/run_pipeline.py ingest
+    deps:
+    - path: ../ingest-service/src/ingestion/github_ingester.py
+      hash: md5
+      md5: 6ca2398b88e040c1911799fcd96d3a27
+      size: 13381
+    - path: scripts/run_pipeline.py
+      hash: md5
+      md5: 28d92381db84ec0df1bf8dcce8ed099f
+      size: 5859
+    outs:
+    - path: data/raw/metadata.json
+      hash: md5
+      md5: c7c6d8c6751f99d6d9ff7a7338a5026f
+      size: 57890
+  chunk:
+    cmd: python scripts/run_pipeline.py chunk
+    deps:
+    - path: ../ingest-service/src/chunking/enhanced_chunker.py
+      hash: md5
+      md5: b652292e92c27afc78b705d2fbd33614
+      size: 27873
+    - path: data/raw/metadata.json
+      hash: md5
+      md5: c7c6d8c6751f99d6d9ff7a7338a5026f
+      size: 57890
+    - path: scripts/run_pipeline.py
+      hash: md5
+      md5: 28d92381db84ec0df1bf8dcce8ed099f
+      size: 5859
+    outs:
+    - path: data/processed/chunks.jsonl
+      hash: md5
+      md5: 006dd86ee7ac318eda9f844040a65a4a
+      size: 3178344
+  embed:
+    cmd: python scripts/run_pipeline.py embed
+    deps:
+    - path: ../ingest-service/src/chunking/embedder.py
+      hash: md5
+      md5: f63467d363c2129e91d4f749b1805a1f
+      size: 8076
+    - path: data/processed/chunks.jsonl
+      hash: md5
+      md5: 006dd86ee7ac318eda9f844040a65a4a
+      size: 3178344
+    - path: scripts/run_pipeline.py
+      hash: md5
+      md5: 28d92381db84ec0df1bf8dcce8ed099f
+      size: 5859
+    outs:
+    - path: data/processed/chunks_embedded.jsonl
+      hash: md5
+      md5: 1215bf5921fb0ff88faa223531e6161d
+      size: 9895295
+  validate:
+    cmd: python scripts/run_pipeline.py validate
+    deps:
+    - path: data/processed/chunks_embedded.jsonl
+      hash: md5
+      md5: 1215bf5921fb0ff88faa223531e6161d
+      size: 9895295
+    - path: scripts/run_pipeline.py
+      hash: md5
+      md5: 28d92381db84ec0df1bf8dcce8ed099f
+      size: 5859
+    outs:
+    - path: data/processed/validation_report.json
+      hash: md5
+      md5: 7c2ca9767db24d220b5fa1263d319f43
+      size: 209

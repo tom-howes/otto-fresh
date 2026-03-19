@@ -6,6 +6,8 @@ import QueryProvider from "@/utils/provider";
 import { AuthModalProvider } from "@/context/use-auth-modal";
 import { AuthProvider } from "@/context/use-auth-context";
 import { AuthModal } from "@/components/modals/auth";
+import TokenHandler from "@/components/auth/token-handler";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: {
@@ -47,6 +49,9 @@ const RootLayout = ({ children }: { children: React.ReactNode }) => {
         <QueryProvider>
           <AuthProvider>
             <AuthModalProvider>
+              <Suspense fallback={null}>
+                <TokenHandler />
+              </Suspense>
               <AuthModal />
               <Toaster
                 position="bottom-left"
