@@ -1,0 +1,86 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-ingest:
+    name: Deploy ingest-service
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy ingest-service
+        run: |
+          cd ingest-service
+          gcloud run deploy ingest-service \
+            --source . \
+            --region us-east1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory 2Gi \
+            --timeout 300 \
+            --set-env-vars "\
+          GCP_PROJECT_ID=otto-pm,\
+          GCS_BUCKET_RAW=otto-raw-repos,\
+          GCS_BUCKET_PROCESSED=otto-processed-chunks,\
+          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
+
+  deploy-backend:
+    name: Deploy backend-service
+    runs-on: ubuntu-latest
+    needs: deploy-ingest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Write secret files
+        run: |
+          echo '${{ secrets.FIREBASE_CREDENTIALS }}' > backend/firebase-credentials.json
+          echo '${{ secrets.PRIVATE_KEY }}' > backend/github-private-key.pem
+
+      - name: Deploy backend-service
+        run: |
+          cd backend
+          gcloud run deploy backend-service \
+            --source . \
+            --region us-east1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory 1Gi \
+            --timeout 300 \
+            --set-env-vars "\
+          GCP_PROJECT_ID=otto-pm,\
+          GCS_BUCKET_RAW=otto-raw-repos,\
+          GCS_BUCKET_PROCESSED=otto-processed-chunks,\
+          INGEST_SERVICE_URL=${{ secrets.INGEST_SERVICE_URL }},\
+          FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json,\
+          FIREBASE_PROJECT_ID=otto-pm,\
+          GITHUB_PRIVATE_KEY_PATH=./github-private-key.pem,\
+          GITHUB_APP_ID=${{ secrets.APP_ID }},\
+          GITHUB_CLIENT_ID=${{ secrets.CLIENT_ID }},\
+          GITHUB_CLIENT_SECRET=${{ secrets.CLIENT_SECRET }},\
+          GITHUB_CALLBACK_URL=${{ secrets.CALLBACK_URL }},\
+          JWT_SECRET_KEY=${{ secrets.JWT_SECRET }},\
+          GITHUB_WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}"
