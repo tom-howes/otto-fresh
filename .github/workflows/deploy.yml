@@ -10,6 +10,8 @@ jobs:
   data-pipeline:
     name: Data Pipeline Full Run
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -167,9 +169,9 @@ jobs:
                 "${{ needs.test.result }}" == "success" && \
                 "${{ needs.deploy-ingest.result }}" == "success" && \
                 "${{ needs.deploy-backend.result }}" == "success" ]]; then
-            echo "result=✅ All jobs passed" >> $GITHUB_OUTPUT
+            echo "result= All jobs passed" >> $GITHUB_OUTPUT
           else
-            echo "result=❌ One or more jobs failed" >> $GITHUB_OUTPUT
+            echo "result= One or more jobs failed" >> $GITHUB_OUTPUT
           fi
 
       - name: Send summary email
