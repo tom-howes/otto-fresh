@@ -27,12 +27,13 @@ jobs:
 
       - name: Run tests
         run: |
-          cd data-pipeline
+          cd Data-Pipeline
           pytest tests/ -v
 
   deploy-ingest:
     name: Deploy ingest-service
     runs-on: ubuntu-latest
+    needs: test
 
     steps:
       - name: Checkout code
