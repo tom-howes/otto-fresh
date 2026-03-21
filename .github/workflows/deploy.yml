@@ -4,12 +4,53 @@ on:
   push:
     branches:
       - main
+      - setup/cicd-pipeline
 
 jobs:
+  data-pipeline:
+    name: Data Pipeline Full Run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd Data-Pipeline
+          pip install -r requirements.txt
+
+      - name: Run pipeline (ingest, chunk, embed, validate)
+        run: |
+          cd Data-Pipeline
+          python scripts/run_pipeline.py ingest
+          python scripts/run_pipeline.py chunk
+          python scripts/run_pipeline.py embed
+          python scripts/run_pipeline.py validate
+
+      - name: Check for bias (fail if detected)
+        run: |
+          cd Data-Pipeline
+          if jq -e '.bias_detected == true' data/processed/bias_detection.json; then
+            echo 'Bias detected! Failing build.'
+            exit 1
+          else
+            echo 'No bias detected.'
+          fi
+
+      - name: Upload bias report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bias_detection_report
+          path: Data-Pipeline/data/processed/bias_detection.json
+
   test:
     name: Run Data Pipeline Tests
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,8 +74,7 @@ jobs:
   deploy-ingest:
     name: Deploy ingest-service
     runs-on: ubuntu-latest
-    needs: test
-
+    needs: [data-pipeline, test]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -67,7 +107,6 @@ jobs:
     name: Deploy backend-service
     runs-on: ubuntu-latest
     needs: deploy-ingest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -109,3 +148,48 @@ jobs:
           GITHUB_CALLBACK_URL=${{ secrets.CALLBACK_URL }},\
           JWT_SECRET_KEY=${{ secrets.JWT_SECRET }},\
           GITHUB_WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}"
+
+  notify:
+    name: Send Summary Email
+    runs-on: ubuntu-latest
+    needs: [data-pipeline, test, deploy-ingest, deploy-backend]
+    if: always()  # always runs even if previous jobs failed
+    steps:
+      - name: Set status
+        id: status
+        run: |
+          if [[ "${{ needs.data-pipeline.result }}" == "success" && \
+                "${{ needs.test.result }}" == "success" && \
+                "${{ needs.deploy-ingest.result }}" == "success" && \
+                "${{ needs.deploy-backend.result }}" == "success" ]]; then
+            echo "result=✅ All jobs passed" >> $GITHUB_OUTPUT
+          else
+            echo "result=❌ One or more jobs failed" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send summary email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          to: ${{ secrets.EMAIL_TO }}
+          from: ${{ secrets.SMTP_USERNAME }}
+          subject: "${{ steps.status.outputs.result }} - Deploy to Cloud Run"
+          body: |
+            Deployment Summary
+            ------------------
+            Status:        ${{ steps.status.outputs.result }}
+            Repo:          ${{ github.repository }}
+            Branch:        ${{ github.ref_name }}
+            Commit:        ${{ github.sha }}
+            Triggered by:  ${{ github.actor }}
+
+            Job Results:
+            - Data Pipeline:    ${{ needs.data-pipeline.result }}
+            - Tests:            ${{ needs.test.result }}
+            - Deploy Ingest:    ${{ needs.deploy-ingest.result }}
+            - Deploy Backend:   ${{ needs.deploy-backend.result }}
+
+            Logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
