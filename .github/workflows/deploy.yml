@@ -181,7 +181,6 @@ jobs:
   notify:
     name: Send Summary Email
     runs-on: ubuntu-latest
-    needs: [data-pipeline, test, deploy-ingest, deploy-backend, lint]
     if: always()  # always runs even if previous jobs failed
     steps:
       - name: Set status
