@@ -72,6 +72,14 @@ jobs:
           cd Data-Pipeline
           pip install -r requirements.txt
           pip install pytest
+      - name: Install style-checker dependencies
+        run: |
+          cd ../../style-checker
+          pip install -r requirements.txt
+      - name: Lint with style-checker
+        run: |
+          cd ../../style-checker
+          python style-checker.py ../Data-Pipeline
 
       - name: Run tests
         run: |
