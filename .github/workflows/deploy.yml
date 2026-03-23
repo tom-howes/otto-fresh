@@ -1,5 +1,13 @@
 
 name: Deploy to Cloud Run
+
+
+  push:
+    branches:
+      - main
+      - setup/cicd-pipeline
+
+on:
   lint:
     name: Lint with style-checker
     runs-on: ubuntu-latest
@@ -21,8 +29,6 @@ name: Deploy to Cloud Run
         run: |
           cd style-checker
           python style-checker.py ../Data-Pipeline
-
-on:
   push:
     branches:
       - main
