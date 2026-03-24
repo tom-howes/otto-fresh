@@ -1,0 +1,96 @@
+{
+  "timestamp": "2026-03-23T20:34:28.754643",
+  "prompt_version": "V4",
+  "dimensions": {
+    "language": {
+      "slices": {
+        "Python": {
+          "faithfulness": 0.869,
+          "answer_relevancy": 0.916,
+          "flagged": false,
+          "flag_reasons": []
+        },
+        "TypeScript": {
+          "faithfulness": 0.958,
+          "answer_relevancy": 0.893,
+          "flagged": false,
+          "flag_reasons": []
+        }
+      },
+      "stats": {
+        "faithfulness_mean": 0.913,
+        "faithfulness_stdev": 0.063,
+        "relevancy_mean": 0.905,
+        "relevancy_stdev": 0.016
+      },
+      "flagged_slices": []
+    },
+    "repo_section": {
+      "slices": {
+        "frontend": {
+          "faithfulness": 0.917,
+          "answer_relevancy": 0.939,
+          "flagged": false,
+          "flag_reasons": []
+        },
+        "backend": {
+          "faithfulness": 1.0,
+          "answer_relevancy": 0.934,
+          "flagged": false,
+          "flag_reasons": []
+        },
+        "Data-Pipeline": {
+          "faithfulness": 0.624,
+          "answer_relevancy": 0.905,
+          "flagged": false,
+          "flag_reasons": []
+        },
+        "infrastructure": {
+          "faithfulness": 0.917,
+          "answer_relevancy": 1.0,
+          "flagged": false,
+          "flag_reasons": []
+        }
+      },
+      "stats": {
+        "faithfulness_mean": 0.865,
+        "faithfulness_stdev": 0.165,
+        "relevancy_mean": 0.945,
+        "relevancy_stdev": 0.04
+      },
+      "flagged_slices": []
+    },
+    "chunk_size": {
+      "slices": {
+        "small": {
+          "faithfulness": 0.784,
+          "answer_relevancy": 0.922,
+          "flagged": false,
+          "flag_reasons": []
+        },
+        "medium": {
+          "faithfulness": 0.846,
+          "answer_relevancy": 0.989,
+          "flagged": false,
+          "flag_reasons": []
+        },
+        "large": {
+          "faithfulness": 0.84,
+          "answer_relevancy": 0.821,
+          "flagged": false,
+          "flag_reasons": []
+        }
+      },
+      "stats": {
+        "faithfulness_mean": 0.823,
+        "faithfulness_stdev": 0.034,
+        "relevancy_mean": 0.911,
+        "relevancy_stdev": 0.085
+      },
+      "flagged_slices": []
+    }
+  },
+  "bias_detected": false,
+  "flagged_slices": [],
+  "mitigation": []
+}
