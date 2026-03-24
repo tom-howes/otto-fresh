@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-03-23T20:33:22.194536",
+  "prompt_version": "V4",
+  "dimensions": {
+    "chunk_size": {
+      "slices": {
+        "small": {
+          "faithfulness": 0.784,
+          "answer_relevancy": 0.922,
+          "flagged": false,
+          "flag_reasons": []
+        }
+      },
+      "stats": {
+        "faithfulness_mean": null,
+        "relevancy_mean": null,
+        "faithfulness_stdev": null,
+        "relevancy_stdev": null
+      },
+      "flagged_slices": []
+    }
+  },
+  "bias_detected": false,
+  "flagged_slices": [],
+  "mitigation": []
+}
