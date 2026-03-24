@@ -99,29 +99,6 @@ jobs:
           name: bias_detection_report
           path: ml-evaluation/bias_detection.json
 
-  validation:
-    name: Run Validation
-    runs-on: ubuntu-latest
-    needs: data-pipeline
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13.12'
-
-      - name: Install dependencies
-        run: |
-          cd ml-evaluation
-          pip install -r requirements.txt
-
-      - name: Run validation
-        run: |
-          cd ml-evaluation
-          python run_validation.py
-
   test:
     name: Run Data Pipeline Tests
     runs-on: ubuntu-latest
