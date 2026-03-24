@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - setup/cicd-pipeline
+    paths-ignore:
+      - "*.md"
+      - "docs/**"
 
 jobs:
   lint:
