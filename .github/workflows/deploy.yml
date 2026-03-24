@@ -159,6 +159,11 @@ jobs:
     name: Run Validation
     runs-on: ubuntu-latest
     needs: deploy-ingest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GCP_PROJECT_ID: otto-pm
+      GCP_REGION: us-east1
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
