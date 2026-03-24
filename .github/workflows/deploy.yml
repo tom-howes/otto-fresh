@@ -76,6 +76,52 @@ jobs:
           name: bias_detection_report
           path: Data-Pipeline/data/processed/bias_detection.json
 
+  bias-eval:
+    name: Run Bias Evaluation
+    runs-on: ubuntu-latest
+    needs: data-pipeline
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd ml-evaluation
+          pip install -r requirements.txt
+
+      - name: Run bias evaluation
+        run: |
+          cd ml-evaluation
+          python run_bias_eval.py
+
+  validation:
+    name: Run Validation
+    runs-on: ubuntu-latest
+    needs: data-pipeline
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd ml-evaluation
+          pip install -r requirements.txt
+
+      - name: Run validation
+        run: |
+          cd ml-evaluation
+          python run_validation.py
+
   test:
     name: Run Data Pipeline Tests
     runs-on: ubuntu-latest
@@ -103,7 +149,7 @@ jobs:
   deploy-ingest:
     name: Deploy ingest-service
     runs-on: ubuntu-latest
-    needs: [data-pipeline, test, lint]
+    needs: [data-pipeline, test, lint, bias-eval, validation]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
