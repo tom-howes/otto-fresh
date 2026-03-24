@@ -135,7 +135,7 @@ All experiment runs are logged to `ml-evaluation/experiments/experiments.jsonl`.
 
 ## 5. Model Sensitivity Analysis
 
-*Replaces SHAP / LIME and hyperparameter sensitivity analysis. These techniques are not applicable to black-box LLMs — Otto uses prompt and input ablation instead.*
+*SHAP and LIME are not applicable to black-box LLMs as internal model weights are inaccessible. Otto instead performs sensitivity analysis via hyperparameter sweeps to identify which generation parameters most affect output quality, and input ablation to test robustness to query phrasing and reduced retrieval context.*
 
 ### 5a. Hyperparameter Sensitivity
 
@@ -223,7 +223,7 @@ No bias was detected and no mitigation was applied. If bias had been detected, t
 
 ## 7. CI/CD Pipeline Automation (GitHub Actions)
 
-![CI/CD Pipeline](CICD-snip.png)
+<div align="center"><img src="CICD-snip.png" width="460"/></div>
 
 Otto uses **GitHub Actions** to automate validation, bias detection, and redeployment whenever new code or data changes are pushed to the repository.
 
@@ -233,38 +233,27 @@ Otto uses **GitHub Actions** to automate validation, bias detection, and redeplo
 
 ### Stage 1 — CI/CD Setup
 
-- Added a GitHub Actions workflow (`.github/workflows/deploy.yml`) that triggers on push to `main`.
-- Workflow runs lint, data pipeline, tests, and service deployments in sequence.
-- Environment variables configured: GEMINI_API_KEY, GCP_PROJECT_ID, GCP_REGION.
+Added a GitHub Actions workflow (`.github/workflows/deploy.yml`) that triggers on push to `main`. The workflow runs lint, data pipeline, tests, and service deployments in sequence, with environment variables `GEMINI_API_KEY`, `GCP_PROJECT_ID`, and `GCP_REGION` configured as GitHub secrets.
 
 ### Stage 2 — Automated Model Validation
 
-- Implemented in `ml-evaluation/run_validation.py`. Runs 5 held-out queries against the live RAG endpoint.
-- Computes RAGAS faithfulness and answer_relevancy scores using `gemini-2.5-flash-lite` via Vertex AI as the judge LLM.
-- Fails the build (exits with code 1) if faithfulness < 0.5 or answer_relevancy < 0.7, enabling use as a CI/CD gate.
+Implemented in `ml-evaluation/run_validation.py`. Runs 5 held-out queries against the live RAG endpoint and computes RAGAS faithfulness and answer relevancy scores using `gemini-2.5-flash-lite` via Vertex AI as the judge LLM. Fails the build (exits with code 1) if faithfulness < 0.5 or answer relevancy < 0.7, enabling use as a CI/CD gate.
 
 ### Stage 3 — Automated Model Bias Detection
 
-- Implemented in `ml-evaluation/run_bias_eval.py`. Slices dataset by programming language, repo section, and chunk size.
-- Computes RAGAS scores per slice and flags slices more than 1.5 standard deviations below average.
-- Outputs structured JSON bias report to `reports/bias_report.json`. Fails the build if bias is detected across any slice.
+Implemented in `ml-evaluation/run_bias_eval.py`. Slices the dataset by programming language, repo section, and chunk size, computes RAGAS scores per slice, and flags slices more than 1.5 standard deviations below average. Outputs a structured JSON bias report to `reports/bias_report.json` and fails the build if bias is detected across any slice.
 
 ### Stage 4 — Model Deployment
 
-Once validation and bias checks pass, the backend and ingest services are automatically redeployed to Cloud Run.
-
-- **Ingest Service:** Deployed via `deploy-ingest.sh`; uses `gcloud run deploy --source=.` to build and deploy to `us-east1` with 2Gi memory and 300s timeout.
-- **Backend Service:** Deployed automatically via GitHub Actions using GCP service account. Both services are tagged with semantic version numbers and stored in GCP Artifact Registry.
+Once validation and bias checks pass, the backend and ingest services are automatically redeployed to Cloud Run. The ingest service is deployed via `deploy-ingest.sh` using `gcloud run deploy --source=.` to build and deploy to `us-east1` with 2Gi memory and a 300s timeout. The backend service is deployed automatically via GitHub Actions using a dedicated GCP service account. Both services are tagged with semantic version numbers and stored in GCP Artifact Registry.
 
 ### Stage 5 — Notifications and Alerts
 
-- Implemented in `.github/workflows/deploy.yml` as the `notify` job.
-- Sends summary email of pipeline status (success/failure) using GitHub Actions email action.
-- Runs regardless of job outcome, to ensure stakeholders are informed of pipeline results.
+Implemented in `.github/workflows/deploy.yml` as the `notify` job. Sends a summary email of pipeline status (success or failure) using the GitHub Actions email action. The job runs regardless of outcome to ensure stakeholders are always informed of pipeline results.
 
 ### Stage 6 — Rollback Mechanism
 
-A traditional rollback mechanism does not apply to Otto because there is no model artifact being deployed — Gemini is a static external API. Rolling back means reverting to a previous Git commit via standard Git revert. Cloud Run supports revision rollback for the service layer via `gcloud run services update-traffic` if a deployment introduces a regression, allowing instantaneous traffic shift to a previous healthy revision.
+A traditional rollback mechanism does not apply to Otto because there is no model artifact being deployed — Gemini is a static external API. Rolling back means reverting to a previous Git commit via standard Git revert. Cloud Run supports revision rollback for the service layer via `gcloud run services update-traffic`, allowing instantaneous traffic shift to a previous healthy revision if a deployment introduces a regression.
 
 ---
 
@@ -295,9 +284,9 @@ Data is loaded at query time from the processed chunk store in GCS. The pipeline
 
 Implemented in `ml-evaluation/run_validation.py`. Runs 5 held-out queries against the live RAG endpoint and computes RAGAS faithfulness and answer relevancy scores using `gemini-2.5-flash-lite` via Vertex AI as the judge LLM. Exits with code 1 if scores fall below thresholds, enabling use as a CI/CD gate.
 
-### 8.5 Code for Bias Checking 
+### 8.5 Code for Bias Checking
 
-Slices the dataset by programming language, repo section, and chunk size, computes RAGAS scores per slice, flags slices more than 1.5 stdev below average, and outputs a structured JSON bias report to `reports/bias_report.json`. Supports `--dimension` and `--slice` flags for targeted reruns. Charts are generated by `ml-evaluation/plot_bias.py`.
+Implemented in `ml-evaluation/run_bias_eval.py`. Slices the dataset by programming language, repo section, and chunk size, computes RAGAS scores per slice, flags slices more than 1.5 stdev below average, and outputs a structured JSON bias report to `reports/bias_report.json`. Supports `--dimension` and `--slice` flags for targeted reruns. Charts are generated by `ml-evaluation/plot_bias.py`.
 
 ### 8.6 Code for Model Selection after Bias Checking
 
@@ -307,10 +296,6 @@ Implemented in `ml-evaluation/select_prompt_version.py`. Loads all runs from `ex
 
 *Not applicable — Gemini is accessed via the Vertex AI API. No model artifact exists to push. As noted in the guidelines, this step is not necessary for pre-trained large models.*
 
-In Otto's case, service versioning is handled through two mechanisms: Docker images for the backend and ingest services are tagged with semantic version numbers and stored in GCP Artifact Registry, providing a full image version history. Each deployment to Cloud Run creates a new named revision pointing to the tagged image, enabling rollback to any previous revision and traffic splitting between versions if needed.
+In Otto's case, service versioning is handled via Docker images tagged with semantic version numbers and stored in GCP Artifact Registry. Each deployment creates a new Cloud Run revision pointing to the tagged image, enabling rollback via `gcloud run services update-traffic` and traffic splitting between revisions if needed.
 
-The ingest service is deployed manually via `deploy-ingest.sh`, which uses `gcloud run deploy --source=.` to build the Docker image from source and deploy it directly to Cloud Run in the `us-east1` region. The service is configured with 2Gi of memory, a 300 second request timeout, and the GCP project and GCS bucket environment variables injected at deploy time. The `--allow-unauthenticated` flag enables the RAG endpoint to be called by the frontend without requiring GCP credentials.
-
-The backend service is deployed automatically via GitHub Actions using a dedicated GCP service account (`github-actions-deploy@otto-pm.iam.gserviceaccount.com`), triggering on pushes to `main`. Both services run in the `us-east1` region under the `otto-pm` GCP project.
-
-- [ ] **TODO:** Confirm backend GitHub Actions deployment workflow and document whether Docker images are tagged and pushed to GCP Artifact Registry as part of the pipeline.
+The ingest service is deployed manually via `deploy-ingest.sh` using `gcloud run deploy --source=.`, configured with 2Gi memory, a 300 second timeout, and GCP environment variables injected at deploy time. The backend service is deployed automatically via GitHub Actions using the `github-actions-deploy@otto-pm.iam.gserviceaccount.com` service account on every push to `main`. Both services run in the `us-east1` region under the `otto-pm` GCP project.
