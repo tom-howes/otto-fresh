@@ -191,7 +191,8 @@ class RAGServices:
                 'file': c['file_path'],
                 'lines': f"{c['start_line']}-{c['end_line']}",
                 'type': c['chunk_type'],
-                'similarity': c.get('similarity_score', 0)
+                'similarity': c.get('similarity_score', 0),
+                'content' : c.get('content', '')
             }
             for c in chunks[:5]
         ]
