@@ -231,29 +231,38 @@ Otto uses **GitHub Actions** to automate validation, bias detection, and redeplo
 
 ### Stage 1 — CI/CD Setup
 
-- [ ] **TODO:** Add a GitHub Actions workflow step that runs the full data pipeline on push to `main`.
+- Added a GitHub Actions workflow (`.github/workflows/deploy.yml`) that triggers on push to `main`.
+- Workflow runs lint, data pipeline, tests, and service deployments in sequence.
+- Environment variables configured: GEMINI_API_KEY, GCP_PROJECT_ID, GCP_REGION.
 
 ### Stage 2 — Automated Model Validation
 
-- [ ] **TODO:** Add a workflow step that runs `run_validation.py` and fails the build if RAGAS scores fall below defined thresholds (faithfulness ≥ 0.5, answer relevancy ≥ 0.7).
+- Implemented in `ml-evaluation/run_validation.py`. Runs 5 held-out queries against the live RAG endpoint.
+- Computes RAGAS faithfulness and answer_relevancy scores using `gemini-2.5-flash-lite` via Vertex AI as the judge LLM.
+- Fails the build (exits with code 1) if faithfulness < 0.5 or answer_relevancy < 0.7, enabling use as a CI/CD gate.
 
 ### Stage 3 — Automated Model Bias Detection
 
-- [ ] **TODO:** Add a workflow step that runs `run_bias_eval.py`, logs the full bias report as a build artifact, and fails the build if bias is detected across any slice.
+- Implemented in `ml-evaluation/run_bias_eval.py`. Slices dataset by programming language, repo section, and chunk size.
+- Computes RAGAS scores per slice and flags slices more than 1.5 standard deviations below average.
+- Outputs structured JSON bias report to `reports/bias_report.json`. Fails the build if bias is detected across any slice.
 
 ### Stage 4 — Model Deployment
 
-Once validation and bias checks pass, the backend and ingest services are automatically redeployed to Cloud Run. In place of pushing to a model registry (not applicable for a pre-trained LLM), the deployment step pushes the latest service revision to Cloud Run.
+Once validation and bias checks pass, the backend and ingest services are automatically redeployed to Cloud Run.
 
-- [ ] **TODO:** Add a workflow step that redeploys backend and ingest services to Cloud Run if all previous stages pass.
+- **Ingest Service:** Deployed via `deploy-ingest.sh`; uses `gcloud run deploy --source=.` to build and deploy to `us-east1` with 2Gi memory and 300s timeout.
+- **Backend Service:** Deployed automatically via GitHub Actions using GCP service account. Both services are tagged with semantic version numbers and stored in GCP Artifact Registry.
 
 ### Stage 5 — Notifications and Alerts
 
-- [ ] **TODO:** Configure Slack or email notifications for: pipeline failure, bias detected, validation failure, and successful deployment.
+- Implemented in `.github/workflows/deploy.yml` as the `notify` job.
+- Sends summary email of pipeline status (success/failure) using GitHub Actions email action.
+- Runs regardless of job outcome, to ensure stakeholders are informed of pipeline results.
 
 ### Stage 6 — Rollback Mechanism
 
-A traditional rollback mechanism does not apply to Otto because there is no model artifact being deployed — Gemini is a static external API. Rolling back means reverting to a previous Git commit via standard Git revert. Cloud Run also supports traffic splitting and revision rollback for the service layer if a deployment introduces a regression.
+A traditional rollback mechanism does not apply to Otto because there is no model artifact being deployed — Gemini is a static external API. Rolling back means reverting to a previous Git commit via standard Git revert. Cloud Run supports revision rollback for the service layer via `gcloud run services update-traffic` if a deployment introduces a regression, allowing instantaneous traffic shift to a previous healthy revision.
 
 ---
 
