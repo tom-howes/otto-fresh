@@ -1,0 +1,9 @@
+# General
+requests
+python-dotenv
+
+# Evaluation Suite
+ragas
+google-generativeai
+litellm
+matplotlib
