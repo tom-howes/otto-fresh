@@ -223,6 +223,8 @@ No bias was detected and no mitigation was applied. If bias had been detected, t
 
 ## 7. CI/CD Pipeline Automation (GitHub Actions)
 
+![CI/CD Pipeline](./CICD-snip.png)
+
 Otto uses **GitHub Actions** to automate validation, bias detection, and redeployment whenever new code or data changes are pushed to the repository.
 
 **Trigger conditions:**
