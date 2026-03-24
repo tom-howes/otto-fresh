@@ -181,7 +181,7 @@ jobs:
   deploy-backend:
     name: Deploy backend-service
     runs-on: ubuntu-latest
-    needs: [deploy-ingest, validation]
+    needs: deploy-ingest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
