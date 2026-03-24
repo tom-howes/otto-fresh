@@ -70,12 +70,6 @@ jobs:
             echo 'No bias detected.'
           fi
 
-      - name: Upload bias report artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: bias_detection_report
-          path: Data-Pipeline/data/processed/bias_detection.json
-
   bias-eval:
     name: Run Bias Evaluation
     runs-on: ubuntu-latest
@@ -98,6 +92,12 @@ jobs:
         run: |
           cd ml-evaluation
           python run_bias_eval.py
+
+      - name: Upload bias report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bias_detection_report
+          path: ml-evaluation/bias_detection.json
 
   validation:
     name: Run Validation
