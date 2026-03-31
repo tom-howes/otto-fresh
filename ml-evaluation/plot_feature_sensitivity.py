@@ -59,7 +59,7 @@ def plot_context_degradation(topk_runs: dict):
     sorted_vals = sorted(topk_runs.keys())
     faith_scores = [topk_runs[v]["scores"]["faithfulness"] for v in sorted_vals]
     rel_scores = [topk_runs[v]["scores"]["answer_relevancy"] for v in sorted_vals]
-    labels = [str(v) + (" ★" if v == 8 else "") for v in sorted_vals]
+    labels = [str(v) + (" *" if v == 8 else "") for v in sorted_vals]
 
     x = np.arange(len(sorted_vals))
     width = 0.35
@@ -89,7 +89,7 @@ def plot_context_degradation(topk_runs: dict):
 
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=10)
-    ax.set_xlabel("Top-K Chunks  (★ = selected value)", fontsize=10)
+    ax.set_xlabel("Top-K Chunks  (* = selected value)", fontsize=10)
     ax.set_ylabel("Score (0-1)")
     ax.set_title("Feature Sensitivity — Context Degradation by Top-K")
     ax.set_ylim(0, 1.15)
@@ -103,7 +103,7 @@ def plot_context_degradation(topk_runs: dict):
     path = os.path.join(CHARTS_DIR, "feature_context_degradation.png")
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"✓ Saved: {path}")
+    print(f"Saved: {path}")
 
 
 def plot_query_rephrasing(run: dict):
@@ -148,29 +148,29 @@ def plot_query_rephrasing(run: dict):
     path = os.path.join(CHARTS_DIR, "feature_query_rephrasing.png")
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"✓ Saved: {path}")
+    print(f"Saved: {path}")
 
 
 def main():
     print(f"\n{'='*50}")
-    print("📊 OTTO — PLOT FEATURE SENSITIVITY RESULTS")
+    print("OTTO — PLOT FEATURE SENSITIVITY RESULTS")
     print(f"{'='*50}")
 
     topk_runs, rephrasing_run = load_runs()
 
     if topk_runs:
-        print(f"\n✓ Found top_k runs: {sorted(topk_runs.keys())}")
+        print(f"\nFound top_k runs: {sorted(topk_runs.keys())}")
         plot_context_degradation(topk_runs)
     else:
-        print("⚠️  No top_k sensitivity runs found")
+        print("No top_k sensitivity runs found")
 
     if rephrasing_run:
-        print(f"\n✓ Found rephrasing run")
+        print(f"\nFound rephrasing run")
         plot_query_rephrasing(rephrasing_run)
     else:
-        print("⚠️  No rephrasing run found — run run_feature_sensitivity.py first")
+        print("No rephrasing run found — run run_feature_sensitivity.py first")
 
-    print(f"\n✅ Charts saved to {CHARTS_DIR}")
+    print(f"\nAll charts saved to {CHARTS_DIR}")
 
 
 if __name__ == "__main__":

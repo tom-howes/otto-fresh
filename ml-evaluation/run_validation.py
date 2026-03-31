@@ -78,7 +78,7 @@ def query_rag(question: str) -> dict:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        print(f"❌ Request failed: {e}")
+        print(f"Request failed: {e}")
         return {"answer": "", "sources": [], "chunks_used": 0}
 
 
@@ -96,7 +96,7 @@ def run_ragas_evaluation(queries: list, results: list) -> dict:
         project_id = os.getenv("GCP_PROJECT_ID", "otto-pm")
         location = os.getenv("GCP_REGION", "us-east1")
 
-        print("\n🔧 Initialising RAGAS with Vertex AI...")
+        print("\nInitialising RAGAS with Vertex AI...")
         os.environ["VERTEXAI_PROJECT"] = project_id
         os.environ["VERTEXAI_LOCATION"] = location
 
@@ -135,14 +135,14 @@ def run_ragas_evaluation(queries: list, results: list) -> dict:
                 )
                 faith_scores.append(f.value)
                 rel_scores.append(rv.value)
-                print(f"  ✓ [{q['id']}] faithfulness={f.value:.3f}, relevancy={rv.value:.3f}")
+                print(f"  [{q['id']}] faithfulness={f.value:.3f}, relevancy={rv.value:.3f}")
             return faith_scores, rel_scores
 
-        print("📊 Running RAGAS evaluation...")
+        print("Running RAGAS evaluation...")
         faith_scores, rel_scores = asyncio.run(score_all())
 
         if not faith_scores:
-            print("⚠️  No valid scores produced")
+            print("No valid scores produced")
             return {"faithfulness": None, "answer_relevancy": None}
 
         return {
@@ -151,11 +151,11 @@ def run_ragas_evaluation(queries: list, results: list) -> dict:
         }
 
     except ImportError as e:
-        print(f"⚠️  Missing dependency: {e}")
-        print("   Run: pip install ragas google-generativeai litellm")
+        print(f"Missing dependency: {e}")
+        print("Run: pip install ragas google-generativeai litellm")
         return {"faithfulness": None, "answer_relevancy": None}
     except Exception as e:
-        print(f"⚠️  RAGAS evaluation failed: {e}")
+        print(f"RAGAS evaluation failed: {e}")
         return {"faithfulness": None, "answer_relevancy": None}
 
 
@@ -164,33 +164,33 @@ def run_ragas_evaluation(queries: list, results: list) -> dict:
 def log_run(run_data: dict):
     with open(EXPERIMENTS_LOG, "a") as f:
         f.write(json.dumps(run_data) + "\n")
-    print(f"📝 Logged to {EXPERIMENTS_LOG}")
+    print(f"Logged to {EXPERIMENTS_LOG}")
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
     print(f"\n{'='*60}")
-    print(f"🔍 OTTO MODEL VALIDATION")
+    print(f"OTTO MODEL VALIDATION")
     print(f"{'='*60}")
     print(f"Endpoint: {INGEST_SERVICE_URL}")
     print(f"Repo:     {REPO}")
     print(f"Queries:  {len(VALIDATION_QUERIES)}")
-    print(f"Thresholds: faithfulness ≥ {FAITHFULNESS_THRESHOLD}, "
-          f"answer_relevancy ≥ {ANSWER_RELEVANCY_THRESHOLD}")
+    print(f"Thresholds: faithfulness >= {FAITHFULNESS_THRESHOLD}, "
+          f"answer_relevancy >= {ANSWER_RELEVANCY_THRESHOLD}")
 
     results = []
     for i, q in enumerate(VALIDATION_QUERIES, 1):
         print(f"\n[{i}/{len(VALIDATION_QUERIES)}] {q['question']}")
         result = query_rag(q["question"])
         results.append(result)
-        print(f"  ✓ Answer: {result.get('answer', '')[:100]}...")
-        print(f"  ✓ Chunks used: {result.get('chunks_used', 0)}")
+        print(f"  Answer: {result.get('answer', '')[:100]}...")
+        print(f"  Chunks used: {result.get('chunks_used', 0)}")
 
     scores = run_ragas_evaluation(VALIDATION_QUERIES, results)
 
     print(f"\n{'='*60}")
-    print(f"📊 VALIDATION RESULTS")
+    print(f"VALIDATION RESULTS")
     print(f"{'='*60}")
     print(f"Faithfulness:     {scores['faithfulness']} "
           f"(threshold: {FAITHFULNESS_THRESHOLD})")
@@ -199,20 +199,20 @@ def main():
 
     passed = True
     if scores["faithfulness"] is None or scores["answer_relevancy"] is None:
-        print("❌ FAILED: RAGAS evaluation did not produce scores — cannot validate")
+        print("FAILED: RAGAS evaluation did not produce scores — cannot validate")
         passed = False
     else:
         if scores["faithfulness"] < FAITHFULNESS_THRESHOLD:
-            print(f"❌ FAILED: Faithfulness below threshold")
+            print(f"FAILED: Faithfulness below threshold")
             passed = False
         if scores["answer_relevancy"] < ANSWER_RELEVANCY_THRESHOLD:
-            print(f"❌ FAILED: Answer relevancy below threshold")
+            print(f"FAILED: Answer relevancy below threshold")
             passed = False
 
     if passed:
-        print(f"✅ VALIDATION PASSED")
+        print(f"VALIDATION PASSED")
     else:
-        print(f"❌ VALIDATION FAILED")
+        print(f"VALIDATION FAILED")
 
     if scores["faithfulness"] is not None:
         log_run({
@@ -233,7 +233,7 @@ def main():
             }
         })
     else:
-        print("⚠️  Skipping log — no valid scores produced")
+        print("Skipping log — no valid scores produced")
 
     sys.exit(0 if passed else 1)
 

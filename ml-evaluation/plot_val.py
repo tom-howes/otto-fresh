@@ -1,15 +1,14 @@
 """
-Plot Results
+Plot Validation Results
 Reads experiments/experiments.jsonl and generates bar charts.
 
 Usage:
     cd ml-evaluation
-    python plot_results.py
+    python plot_val.py
 
 Output:
-    charts/scores_by_run.png
-    charts/scores_by_prompt_version.png
-    charts/latest_run_summary.png
+    charts/validation/scores_by_run.png
+    charts/validation/latest_run_summary.png
 """
 import os
 import json
@@ -17,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 EXPERIMENTS_LOG = os.path.join(os.path.dirname(__file__), "experiments", "experiments.jsonl")
-CHARTS_DIR = os.path.join(os.path.dirname(__file__), "charts")
+CHARTS_DIR = os.path.join(os.path.dirname(__file__), "charts", "validation")
 
 FAITHFULNESS_THRESHOLD = 0.5
 RELEVANCY_THRESHOLD = 0.7
@@ -38,7 +37,7 @@ def load_runs() -> list:
             run = json.loads(line)
             if run.get("scores", {}).get("faithfulness") is not None:
                 runs.append(run)
-    print(f"✓ Loaded {len(runs)} runs")
+    print(f"Loaded {len(runs)} runs")
     return runs
 
 
@@ -92,15 +91,15 @@ def plot_scores_by_run(runs: list):
     path = os.path.join(CHARTS_DIR, "scores_by_run.png")
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"✓ Saved: {path}")
-
-
-
+    print(f"Saved: {path}")
 
 
 def plot_latest_run_summary(runs: list):
-    """Bar chart of the most recent run's scores vs thresholds."""
-    latest = runs[-1]
+    """Bar chart of the most recent validation run's scores vs thresholds."""
+    val_runs = [r for r in runs if r.get("run_type") == "validation"]
+    if not val_runs:
+        val_runs = runs
+    latest = val_runs[-1]
     scores = latest["scores"]
 
     metrics = ["Faithfulness", "Answer Relevancy"]
@@ -122,10 +121,11 @@ def plot_latest_run_summary(runs: list):
     ax.set_ylabel("Score (0-1)")
     ax.set_title(f"Latest Validation Run — {latest['timestamp'][:10]}")
     ax.set_ylim(0, 1.15)
-    ax.bar_label(bars, fmt="%.3f", padding=3, fontsize=11, fontweight="bold")
+    ax.bar_label(bars, labels=[f"{v:.3f}" for v in values],
+                 padding=3, fontsize=11, fontweight="bold")
 
     passed = latest.get("passed", False)
-    status = "✅ PASSED" if passed else "❌ FAILED"
+    status = "PASSED" if passed else "FAILED"
     ax.text(0.5, 1.08, status, transform=ax.transAxes,
             ha="center", fontsize=12, fontweight="bold",
             color="green" if passed else "red")
@@ -134,25 +134,25 @@ def plot_latest_run_summary(runs: list):
     path = os.path.join(CHARTS_DIR, "latest_run_summary.png")
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"✓ Saved: {path}")
+    print(f"Saved: {path}")
 
 
 def main():
     print(f"\n{'='*50}")
-    print("📊 OTTO — PLOT RESULTS")
+    print("OTTO — PLOT VALIDATION RESULTS")
     print(f"{'='*50}")
 
     runs = load_runs()
 
     if not runs:
-        print("❌ No runs found in experiments.jsonl")
+        print("No runs found in experiments.jsonl")
         return
 
     plot_scores_by_run(runs)
     plot_latest_run_summary(runs)
 
-    print(f"\n✅ All charts saved to {CHARTS_DIR}")
-    print("   Include these in your ML development document.")
+    print(f"\nAll charts saved to {CHARTS_DIR}")
+    print("Include these in your ML development document.")
 
 
 if __name__ == "__main__":

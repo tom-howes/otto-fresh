@@ -76,12 +76,12 @@ def plot_slice_chart(dimension: str, slice_names: list, faith_scores: list,
     path = os.path.join(CHARTS_DIR, filename)
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"✓ Saved: {path}")
+    print(f"Saved: {path}")
 
 
 def main():
     print(f"\n{'='*50}")
-    print("📊 OTTO — PLOT BIAS RESULTS")
+    print("OTTO — PLOT BIAS RESULTS")
     print(f"{'='*50}")
 
     with open(REPORT_PATH, "r") as f:
@@ -101,7 +101,7 @@ def main():
             filename=f"bias_{dimension.replace('-', '_').lower()}.png",
         )
 
-    print(f"\n✅ All bias charts saved to {CHARTS_DIR}")
+    print(f"\nAll bias charts saved to {CHARTS_DIR}")
 
 
 if __name__ == "__main__":

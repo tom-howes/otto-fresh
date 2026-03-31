@@ -104,7 +104,7 @@ def query_rag(question: str) -> dict:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        print(f"    ❌ Request failed: {e}")
+        print(f"    Request failed: {e}")
         return {"answer": "", "sources": [], "chunks_used": 0}
 
 
@@ -125,7 +125,7 @@ def run_ragas(queries: list, results: list) -> dict:
 
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            print("    ⚠️  GEMINI_API_KEY not set")
+            print("    GEMINI_API_KEY not set")
             return {"faithfulness": None, "answer_relevancy": None}
 
         llm = llm_factory(
@@ -160,13 +160,13 @@ def run_ragas(queries: list, results: list) -> dict:
                 )
                 faith_scores.append(f.value)
                 rel_scores.append(rv.value)
-                print(f"    ✓ [{q['id']}] faithfulness={f.value:.3f}, relevancy={rv.value:.3f}")
+                print(f"    [{q['id']}] faithfulness={f.value:.3f}, relevancy={rv.value:.3f}")
             return faith_scores, rel_scores
 
         faith_scores, rel_scores = asyncio.run(score_all())
 
         if not faith_scores:
-            print("    ⚠️  No valid scores produced")
+            print("    No valid scores produced")
             return {"faithfulness": None, "answer_relevancy": None}
 
         return {
@@ -175,7 +175,7 @@ def run_ragas(queries: list, results: list) -> dict:
         }
 
     except Exception as e:
-        print(f"    ⚠️  RAGAS failed: {e}")
+        print(f"    RAGAS failed: {e}")
         return {"faithfulness": None, "answer_relevancy": None}
 
 
@@ -233,7 +233,7 @@ def main(slices=None):
     if slices is None:
         slices = SLICES
     print(f"\n{'='*60}")
-    print("🔍 OTTO — BIAS EVALUATION")
+    print("OTTO — BIAS EVALUATION")
     print(f"{'='*60}")
 
     bias_report = {
@@ -246,7 +246,7 @@ def main(slices=None):
     }
 
     for dimension, slices_in_dim in slices.items():
-        print(f"\n══ Dimension: {dimension} ══")
+        print(f"\n-- Dimension: {dimension} --")
         slice_scores = {}
 
         for slice_name, queries in slices_in_dim.items():
@@ -256,12 +256,12 @@ def main(slices=None):
                 print(f"    [{q['id']}] {q['question'][:60]}...")
                 r = query_rag(q["question"])
                 results.append(r)
-                print(f"      ✓ {r.get('answer', '')[:60]}...")
+                print(f"      {r.get('answer', '')[:60]}...")
 
-            print(f"    📊 Running RAGAS for {slice_name}...")
+            print(f"    Running RAGAS for {slice_name}...")
             scores = run_ragas(queries, results)
             slice_scores[slice_name] = scores
-            print(f"    → faithfulness={scores['faithfulness']}, relevancy={scores['answer_relevancy']}")
+            print(f"    -> faithfulness={scores['faithfulness']}, relevancy={scores['answer_relevancy']}")
 
             if scores["faithfulness"] is not None:
                 log_run({
@@ -280,7 +280,7 @@ def main(slices=None):
                     },
                 })
             else:
-                print(f"    ⚠️  Skipping log for {slice_name} — no valid scores produced")
+                print(f"    Skipping log for {slice_name} — no valid scores produced")
 
         flagged, stats = flag_biased_slices(slice_scores)
 
@@ -310,9 +310,9 @@ def main(slices=None):
         print(f"\n  Stats: faithfulness mean={stats['faithfulness_mean']}, "
               f"stdev={stats['faithfulness_stdev']}")
         if flagged:
-            print(f"  ⚠️  Flagged: {list(flagged.keys())}")
+            print(f"  Flagged: {list(flagged.keys())}")
         else:
-            print(f"  ✅ No bias detected in {dimension} dimension")
+            print(f"  No bias detected in {dimension} dimension")
 
     # ── Mitigation recommendations ────────────────────────────────────────────────
     for item in bias_report["flagged_slices"]:
@@ -332,7 +332,7 @@ def main(slices=None):
     report_path = os.path.join(REPORTS_DIR, "bias_report.json")
     with open(report_path, "w") as f:
         json.dump(bias_report, f, indent=2)
-    print(f"\n📄 Bias report saved to {report_path}")
+    print(f"\nBias report saved to {report_path}")
 
     # ── Log summary (only if at least one slice scored successfully) ──────────────
     all_scores = [
@@ -342,7 +342,7 @@ def main(slices=None):
         if s["faithfulness"] is not None
     ]
     if not all_scores:
-        print("⚠️  Skipping summary log — no valid scores produced")
+        print("Skipping summary log — no valid scores produced")
         return
 
     log_run({
@@ -356,15 +356,15 @@ def main(slices=None):
 
     # ── Final summary ─────────────────────────────────────────────────────────────
     print(f"\n{'='*60}")
-    print("📋 BIAS EVALUATION SUMMARY")
+    print("BIAS EVALUATION SUMMARY")
     print(f"{'='*60}")
     if bias_report["bias_detected"]:
-        print("⚠️  BIAS DETECTED in the following slices:")
+        print("BIAS DETECTED in the following slices:")
         for item in bias_report["flagged_slices"]:
             print(f"  [{item['dimension']}] {item['slice']}: {'; '.join(item['reasons'])}")
         print(f"\nMitigation recommendations saved to {report_path}")
     else:
-        print("✅ No bias detected across all slices and dimensions.")
+        print("No bias detected across all slices and dimensions.")
 
     print(f"\nRun plot_bias.py to generate charts.")
 
@@ -380,10 +380,10 @@ if __name__ == "__main__":
 
     if args.dimension:
         if args.dimension not in SLICES:
-            print(f"❌ Unknown dimension '{args.dimension}'. Options: {list(SLICES.keys())}")
+            print(f"Unknown dimension '{args.dimension}'. Options: {list(SLICES.keys())}")
         elif args.slice:
             if args.slice not in SLICES[args.dimension]:
-                print(f"❌ Unknown slice '{args.slice}'. Options: {list(SLICES[args.dimension].keys())}")
+                print(f"Unknown slice '{args.slice}'. Options: {list(SLICES[args.dimension].keys())}")
             else:
                 main({args.dimension: {args.slice: SLICES[args.dimension][args.slice]}})
         else:
