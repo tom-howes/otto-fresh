@@ -72,7 +72,7 @@ def query_rag(question: str, temperature: float, top_k: int) -> dict:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        print(f"    ❌ Request failed: {e}")
+        print(f"    Request failed: {e}")
         return {"answer": "", "sources": [], "chunks_used": 0}
 
 
@@ -93,7 +93,7 @@ def run_ragas(queries: list, results: list) -> dict:
 
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            print("    ⚠️  GEMINI_API_KEY not set")
+            print("    GEMINI_API_KEY not set")
             return {"faithfulness": None, "answer_relevancy": None}
 
         llm = llm_factory(
@@ -128,13 +128,13 @@ def run_ragas(queries: list, results: list) -> dict:
                 )
                 faith_scores.append(f.value)
                 rel_scores.append(rv.value)
-                print(f"    ✓ [{q['id']}] faithfulness={f.value:.3f}, relevancy={rv.value:.3f}")
+                print(f"    [{q['id']}] faithfulness={f.value:.3f}, relevancy={rv.value:.3f}")
             return faith_scores, rel_scores
 
         faith_scores, rel_scores = asyncio.run(score_all())
 
         if not faith_scores:
-            print("    ⚠️  No valid scores produced")
+            print("    No valid scores produced")
             return {"faithfulness": None, "answer_relevancy": None}
 
         return {
@@ -143,7 +143,7 @@ def run_ragas(queries: list, results: list) -> dict:
         }
 
     except Exception as e:
-        print(f"    ⚠️  RAGAS failed: {e}")
+        print(f"    RAGAS failed: {e}")
         return {"faithfulness": None, "answer_relevancy": None}
 
 
@@ -171,11 +171,11 @@ def run_sweep(sweep_param: str, values: list, fixed_temp: float = None, fixed_to
             print(f"    [{q['id']}] {q['question'][:60]}...")
             r = query_rag(q["question"], temp, topk)
             results.append(r)
-            print(f"      ✓ {r.get('answer', '')[:60]}...")
+            print(f"      {r.get('answer', '')[:60]}...")
 
-        print(f"    📊 Running RAGAS...")
+        print(f"    Running RAGAS...")
         scores = run_ragas(SENSITIVITY_QUERIES, results)
-        print(f"    → faithfulness={scores['faithfulness']}, relevancy={scores['answer_relevancy']}")
+        print(f"    -> faithfulness={scores['faithfulness']}, relevancy={scores['answer_relevancy']}")
 
         if scores["faithfulness"] is not None:
             log_run({
@@ -194,14 +194,14 @@ def run_sweep(sweep_param: str, values: list, fixed_temp: float = None, fixed_to
                 },
             })
         else:
-            print(f"    ⚠️  Skipping log for {sweep_param}={val} — no valid scores produced")
+            print(f"    Skipping log for {sweep_param}={val} — no valid scores produced")
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────────
 
 def main(sweep=None):
     print(f"\n{'='*60}")
-    print("🔬 OTTO — SENSITIVITY ANALYSIS")
+    print("OTTO — SENSITIVITY ANALYSIS")
     print(f"{'='*60}")
     print(f"Prompt version: V4 (final)")
     print(f"Queries per config: {len(SENSITIVITY_QUERIES)}")
@@ -212,8 +212,8 @@ def main(sweep=None):
     if sweep in (None, "top_k"):
         run_sweep("top_k", TOPK_VALUES, fixed_temp=0.2)
 
-    print(f"\n✅ Results logged to {EXPERIMENTS_LOG}")
-    print("   Run plot_sensitivity.py to generate charts.")
+    print(f"\nResults logged to {EXPERIMENTS_LOG}")
+    print("Run plot_sensitivity.py to generate charts.")
 
 
 if __name__ == "__main__":

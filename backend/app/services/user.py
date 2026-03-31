@@ -84,7 +84,7 @@ async def get_user_workspaces(user_id: UserId) -> list[Workspace]:
     workspace_ids = user["workspace_ids"]
     workspace_refs = [db.collection("workspaces").document(
         workspace_id) for workspace_id in workspace_ids]
-    workspace_docs = await db.get_all(workspace_refs)
+    workspace_docs = [doc async for doc in db.get_all(workspace_refs)]
 
     return [doc.to_dict() for doc in workspace_docs if doc.exists]
 

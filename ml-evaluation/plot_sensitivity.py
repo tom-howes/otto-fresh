@@ -51,7 +51,7 @@ def plot_sweep(param_name: str, runs_by_value: dict, default_val, filename: str)
     sorted_vals = sorted(runs_by_value.keys())
     faith_scores = [runs_by_value[v]["scores"]["faithfulness"] for v in sorted_vals]
     rel_scores = [runs_by_value[v]["scores"]["answer_relevancy"] for v in sorted_vals]
-    labels = [str(v) + (" ★" if v == default_val else "") for v in sorted_vals]
+    labels = [str(v) + (" *" if v == default_val else "") for v in sorted_vals]
 
     x = np.arange(len(sorted_vals))
     width = 0.35
@@ -81,7 +81,7 @@ def plot_sweep(param_name: str, runs_by_value: dict, default_val, filename: str)
 
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=10)
-    ax.set_xlabel(f"{param_name}  (★ = selected value)", fontsize=10)
+    ax.set_xlabel(f"{param_name}  (* = selected value)", fontsize=10)
     ax.set_ylabel("Score (0-1)")
     ax.set_title(f"RAGAS Sensitivity Analysis — {param_name}")
     ax.set_ylim(0, 1.15)
@@ -95,33 +95,33 @@ def plot_sweep(param_name: str, runs_by_value: dict, default_val, filename: str)
     path = os.path.join(CHARTS_DIR, filename)
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"✓ Saved: {path}")
+    print(f"Saved: {path}")
 
 
 def main():
     print(f"\n{'='*50}")
-    print("📊 OTTO — PLOT SENSITIVITY RESULTS")
+    print("OTTO — PLOT SENSITIVITY RESULTS")
     print(f"{'='*50}")
 
     runs = load_sensitivity_runs()
 
     if not runs:
-        print("❌ No sensitivity runs found in experiments.jsonl")
+        print("No sensitivity runs found in experiments.jsonl")
         return
 
     if "temperature" in runs:
         plot_sweep("Temperature", runs["temperature"], default_val=0.2,
                    filename="sensitivity_temperature.png")
     else:
-        print("⚠️  No temperature sweep results found")
+        print("No temperature sweep results found")
 
     if "top_k" in runs:
         plot_sweep("Top-K Chunks", runs["top_k"], default_val=8,
                    filename="sensitivity_topk.png")
     else:
-        print("⚠️  No top-k sweep results found")
+        print("No top-k sweep results found")
 
-    print(f"\n✅ All sensitivity charts saved to {CHARTS_DIR}")
+    print(f"\nAll sensitivity charts saved to {CHARTS_DIR}")
 
 
 if __name__ == "__main__":
