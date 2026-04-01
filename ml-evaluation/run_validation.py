@@ -101,7 +101,7 @@ def run_ragas_evaluation(queries: list, results: list) -> dict:
         os.environ["VERTEXAI_LOCATION"] = location
 
         llm = llm_factory(
-            "vertex_ai/gemini-2.5-flash-lite",
+            "vertex_ai/gemini-2.5-flash",
             provider="litellm",
             client=litellm.acompletion,
             max_tokens=8192
