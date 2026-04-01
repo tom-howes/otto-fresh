@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState } from "react";
 
 type Theme = "light" | "dark";
 
@@ -9,14 +9,13 @@ const ThemeContext = createContext<{
   toggle: () => void;
 }>({ theme: "light", toggle: () => {} });
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
+function getInitialTheme(): Theme {
+  if (typeof window === "undefined") return "light";
+  return (localStorage.getItem("otto-theme") as Theme) ?? "light";
+}
 
-  useEffect(() => {
-    const stored = localStorage.getItem("otto-theme") as Theme | null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (stored) setTheme(stored);
-  }, []);
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
 
   const toggle = () => {
     const next: Theme = theme === "light" ? "dark" : "light";

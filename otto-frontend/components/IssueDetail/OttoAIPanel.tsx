@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ragApi, streamSSE, RepoWithStatus, DocType, CompleteCodeResponse, EditCodeResponse, UserPreferences, RepoAccess, CommitHistoryEntry, UserPreferencesRequest } from "@/utils/api";
+import {
+  ragApi, streamSSE,
+  RepoWithStatus, DocType, CompleteCodeResponse, EditCodeResponse,
+  UserPreferences, RepoAccess, CommitHistoryEntry, UserPreferencesRequest,
+} from "@/utils/api";
 
 export default function OttoAIPanel() {
   const [question, setQuestion] = useState("");
@@ -14,7 +18,6 @@ export default function OttoAIPanel() {
   const [reposLoading, setReposLoading] = useState(false);
   const [indexing, setIndexing] = useState(false);
 
-  // Code tab state
   const [codeMode, setCodeMode] = useState<"complete" | "edit">("complete");
   const [codeContext, setCodeContext] = useState("");
   const [editInstruction, setEditInstruction] = useState("");
@@ -24,18 +27,15 @@ export default function OttoAIPanel() {
   const [editResult, setEditResult] = useState<EditCodeResponse | null>(null);
   const [codeLoading, setCodeLoading] = useState(false);
 
-  // Docs tab state
   const [docType, setDocType] = useState<DocType>("readme");
   const [docTarget, setDocTarget] = useState("");
   const [docsResult, setDocsResult] = useState("");
   const [docsLoading, setDocsLoading] = useState(false);
 
-  // Search tab state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ file_path: string; content: string; lines: string; language: string }[]>([]);
   const [searching, setSearching] = useState(false);
 
-  // Repo meta (preferences, access, history)
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [repoAccess, setRepoAccess] = useState<RepoAccess | null>(null);
   const [commitHistory, setCommitHistory] = useState<CommitHistoryEntry[]>([]);
@@ -48,16 +48,13 @@ export default function OttoAIPanel() {
         const data = await ragApi.getAllRepos();
         setRepos(data);
         if (data.length > 0) setRepoName(data[0].full_name);
-      } catch {
-        // not fatal — user can still type manually
-      } finally {
+      } catch { /* not fatal */ } finally {
         setReposLoading(false);
       }
     };
     loadRepos();
   }, []);
 
-  // Load repo metadata whenever selected repo changes
   useEffect(() => {
     if (!repoName || !repoName.includes("/")) return;
     const [owner, repo] = repoName.split("/");
@@ -205,18 +202,16 @@ export default function OttoAIPanel() {
 
   return (
     <div className="mt-8 border-t border-gray-100 dark:border-gray-800 pt-6">
-      {/* Gradient border wrapper */}
       <div className="rounded-2xl p-px bg-gradient-to-br from-violet-400/30 via-blue-400/10 to-violet-400/20 dark:from-violet-500/40 dark:via-blue-500/10 dark:to-violet-500/30 shadow-lg shadow-violet-100/50 dark:shadow-violet-900/20">
         <div className="rounded-[15px] bg-white dark:bg-[#0f0f13] overflow-hidden">
 
-          {/* ── Panel header ── */}
+          {/* Panel header */}
           <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100/80 dark:border-white/5 bg-gradient-to-r from-violet-50/60 via-transparent to-blue-50/40 dark:from-violet-950/40 dark:via-transparent dark:to-blue-950/20">
             <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-blue-500 text-xs font-black text-white shadow-md shadow-violet-300/50 dark:shadow-violet-700/50 shrink-0">
               ✦
             </div>
             <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 tracking-wide">Otto AI</span>
             <div className="h-3 w-px bg-gray-200 dark:bg-white/10" />
-            {/* Tab bar inline with header */}
             <div className="flex items-center gap-0.5">
               {([["qa", "Q&A"], ["code", "Code"], ["docs", "Docs"], ["search", "Search"]] as const).map(([id, label]) => (
                 <button key={id} onClick={() => setActiveTab(id)}
@@ -229,7 +224,6 @@ export default function OttoAIPanel() {
                 </button>
               ))}
             </div>
-            {/* Repo pill — far right */}
             <div className="ml-auto flex items-center gap-2 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-1 min-w-0 max-w-[220px]">
               <svg className="h-3 w-3 text-gray-300 dark:text-gray-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
@@ -257,10 +251,9 @@ export default function OttoAIPanel() {
             </div>
           </div>
 
-          {/* ── Preferences + history row ── */}
+          {/* Preferences + history row */}
           {repoName && repoName.includes("/") && (preferences || commitHistory.length > 0) && (
             <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-100/80 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.02]">
-              {/* Favorite toggle */}
               {preferences && (
                 <button
                   onClick={() => handleSavePreference({ favorite: !preferences.favorite })}
@@ -270,7 +263,6 @@ export default function OttoAIPanel() {
                   ★
                 </button>
               )}
-              {/* Auto-push toggle */}
               {preferences && (
                 <button
                   onClick={() => handleSavePreference({ auto_push_prs: !preferences.auto_push_prs })}
@@ -283,7 +275,6 @@ export default function OttoAIPanel() {
                   Auto PR
                 </button>
               )}
-              {/* Preferred doc type */}
               {preferences && (
                 <select
                   value={preferences.preferred_doc_type}
@@ -296,7 +287,6 @@ export default function OttoAIPanel() {
                   ))}
                 </select>
               )}
-              {/* Commit history toggle */}
               {commitHistory.length > 0 && (
                 <button
                   onClick={() => setShowHistory(p => !p)}
@@ -308,7 +298,7 @@ export default function OttoAIPanel() {
             </div>
           )}
 
-          {/* ── Commit history ── */}
+          {/* Commit history */}
           {showHistory && commitHistory.length > 0 && (
             <div className="px-4 py-2 border-b border-gray-100/80 dark:border-white/5 space-y-1">
               {commitHistory.map((h, i) => (
@@ -323,10 +313,10 @@ export default function OttoAIPanel() {
             </div>
           )}
 
-          {/* ── Tab content ── */}
+          {/* Tab content */}
           <div className="p-5">
 
-            {/* ── Q&A ── */}
+            {/* Q&A */}
             {activeTab === "qa" && (
               <div className="space-y-3">
                 <div className="group rounded-2xl border border-gray-200 dark:border-white/8 bg-gray-50 dark:bg-white/[0.03] focus-within:border-violet-300 dark:focus-within:border-violet-500/50 focus-within:shadow-md focus-within:shadow-violet-100/50 dark:focus-within:shadow-violet-900/20 transition-all overflow-hidden">
@@ -372,10 +362,9 @@ export default function OttoAIPanel() {
               </div>
             )}
 
-            {/* ── Code ── */}
+            {/* Code */}
             {activeTab === "code" && (
               <div className="space-y-3">
-                {/* Mode toggle */}
                 <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-gray-100 dark:bg-white/5">
                   {(["complete", "edit"] as const).map(m => (
                     <button key={m}
@@ -390,7 +379,6 @@ export default function OttoAIPanel() {
                   ))}
                 </div>
 
-                {/* Main input card */}
                 <div className="rounded-2xl border border-gray-200 dark:border-white/8 bg-gray-50 dark:bg-white/[0.03] focus-within:border-violet-300 dark:focus-within:border-violet-500/50 focus-within:shadow-md focus-within:shadow-violet-100/50 dark:focus-within:shadow-violet-900/20 transition-all overflow-hidden">
                   <textarea
                     value={codeMode === "complete" ? codeContext : editInstruction}
@@ -399,7 +387,6 @@ export default function OttoAIPanel() {
                     className="w-full bg-transparent px-4 pt-4 pb-2 text-sm text-gray-700 dark:text-gray-200 outline-none resize-none placeholder-gray-300 dark:placeholder-gray-600 leading-relaxed"
                     placeholder=""
                   />
-                  {/* Bottom row inside card */}
                   <div className="flex items-center gap-3 px-4 py-3 border-t border-gray-100 dark:border-white/5">
                     <svg className="h-3.5 w-3.5 text-gray-300 dark:text-gray-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
@@ -418,7 +405,6 @@ export default function OttoAIPanel() {
                   </div>
                 </div>
 
-                {/* Push to GitHub */}
                 <button onClick={() => setPushToGithub(p => !p)}
                   className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-medium border transition-all ${
                     pushToGithub
@@ -431,7 +417,6 @@ export default function OttoAIPanel() {
                   {pushToGithub ? "✓ Will open a GitHub PR" : "Push to GitHub (creates PR)"}
                 </button>
 
-                {/* Result */}
                 {(completeResult || editResult) && (() => {
                   const code = completeResult ? completeResult.completion : editResult!.modified_code;
                   const file = completeResult?.detected_file ?? editResult?.detected_file ?? editResult?.file;
@@ -461,10 +446,9 @@ export default function OttoAIPanel() {
               </div>
             )}
 
-            {/* ── Docs ── */}
+            {/* Docs */}
             {activeTab === "docs" && (
               <div className="space-y-3">
-                {/* Doc type chips */}
                 <div className="flex flex-wrap gap-2">
                   {([["readme", "README"], ["api", "API Docs"], ["technical", "Technical"], ["user_guide", "User Guide"]] as const).map(([t, label]) => (
                     <button key={t} onClick={() => setDocType(t)}
@@ -478,18 +462,15 @@ export default function OttoAIPanel() {
                   ))}
                 </div>
 
-                {/* Target input */}
                 <div className="flex items-center gap-2.5 rounded-2xl border border-gray-200 dark:border-white/8 bg-gray-50 dark:bg-white/[0.03] px-4 py-3 focus-within:border-violet-300 dark:focus-within:border-violet-500/50 transition-all">
                   <svg className="h-3.5 w-3.5 text-gray-300 dark:text-gray-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                   </svg>
                   <input value={docTarget} onChange={e => setDocTarget(e.target.value)}
                     className="flex-1 bg-transparent text-sm text-gray-600 dark:text-gray-300 outline-none placeholder-gray-300 dark:placeholder-gray-600"
-                    placeholder="Target file or function (optional)"
-                  />
+                    placeholder="Target file or function (optional)" />
                 </div>
 
-                {/* Actions row */}
                 <div className="flex items-center gap-2">
                   <button onClick={() => setPushToGithub(p => !p)}
                     className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-medium border transition-all ${
@@ -510,7 +491,6 @@ export default function OttoAIPanel() {
                   </button>
                 </div>
 
-                {/* Docs result */}
                 {docsResult && (
                   <div className="rounded-2xl border border-gray-200 dark:border-white/8 overflow-hidden">
                     <div className="flex items-center gap-2.5 px-4 py-2.5 bg-gray-50 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/5">
@@ -525,7 +505,7 @@ export default function OttoAIPanel() {
               </div>
             )}
 
-            {/* ── Search ── */}
+            {/* Search */}
             {activeTab === "search" && (
               <div className="space-y-3">
                 <div className="group rounded-2xl border border-gray-200 dark:border-white/8 bg-gray-50 dark:bg-white/[0.03] focus-within:border-violet-300 dark:focus-within:border-violet-500/50 focus-within:shadow-md focus-within:shadow-violet-100/50 dark:focus-within:shadow-violet-900/20 transition-all overflow-hidden">

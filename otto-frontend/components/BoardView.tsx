@@ -33,8 +33,7 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
   const inputRef = useRef<HTMLInputElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  const DEFAULT_SECTIONS = ["todo", "in_progress", "done"];
-  const sectionIds = [...new Set([...DEFAULT_SECTIONS, ...issues.map(i => i.section_id ?? "")])].filter(Boolean);
+  const sectionIds = [...new Set(issues.map(i => i.section_id ?? ""))].filter(Boolean);
   const filtered = issues.filter(i =>
     !search ||
     i.title.toLowerCase().includes(search.toLowerCase()) ||

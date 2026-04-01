@@ -50,7 +50,7 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
   const handleMoveIssue = async (issueId: string, sectionId: string) => {
     if (!workspaceId) return;
     const raw = await workspaceApi.updateIssue(workspaceId, issueId, { section_id: sectionId });
-    setIssues(prev => prev.map(i => i.id === issueId ? { ...adaptIssue(raw), assignee: i.assignee } : i));
+    setIssues(prev => prev.map(i => i.id === issueId ? adaptIssue(raw) : i));
   };
 
   const handleNav = (n: View) => {
@@ -208,16 +208,7 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
         {!loading && user && workspaces.length === 0 ? (
           <WorkspaceSetup onDone={refetchWorkspaces} />
         ) : selectedIssue ? (
-          <IssueDetail
-            issue={selectedIssue}
-            workspaceId={workspaceId}
-            onBack={() => setSelectedIssue(null)}
-            onUpdateIssue={(updated) => {
-              const merged = { ...selectedIssue, ...updated };
-              setSelectedIssue(merged);
-              setIssues(prev => prev.map(i => i.id === selectedIssue.id ? merged : i));
-            }}
-          />
+          <IssueDetail issue={selectedIssue} workspaceId={workspaceId} onBack={() => setSelectedIssue(null)} />
         ) : workspaces.length > 0 ? (
           <>
             {view === "Board"  && <BoardView   issues={issues} loading={issuesLoading} search={search} onSelectIssue={setSelectedIssue} onCreateIssue={handleCreateIssue} onMoveIssue={handleMoveIssue} />}

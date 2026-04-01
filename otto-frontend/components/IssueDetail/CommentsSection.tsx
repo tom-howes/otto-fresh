@@ -114,7 +114,6 @@ export default function CommentsSection({ workspaceId, issueId }: CommentsSectio
         ))}
       </div>
 
-      {/* Add comment */}
       {workspaceId && (
         <div className="flex gap-2">
           <input

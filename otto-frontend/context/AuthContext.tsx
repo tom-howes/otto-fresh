@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // On mount — check if already logged in via session cookie
+  // Check if already logged in via session cookie
   // Also handle token from URL (post-OAuth redirect)
   useEffect(() => {
     const init = async () => {

@@ -1,3 +1,5 @@
+import { SSEEvent } from "./types";
+
 const API_URL = "/api";
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -18,11 +20,13 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   return res.json();
 }
 
-export interface SSEEvent {
-  type: "token" | "complete" | "error";
-  content?: string;
-  sources?: { file: string; lines: string }[];
-  message?: string;
+export function streamFetch(path: string, body: object): Promise<Response> {
+  return fetch(`${API_URL}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 export async function* streamSSE(response: Response): AsyncGenerator<SSEEvent> {
@@ -42,13 +46,4 @@ export async function* streamSSE(response: Response): AsyncGenerator<SSEEvent> {
       }
     }
   }
-}
-
-export function streamFetch(path: string, body: object): Promise<Response> {
-  return fetch(`${API_URL}${path}`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
 }
