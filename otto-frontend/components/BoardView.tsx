@@ -13,13 +13,21 @@ interface BoardViewProps {
   onMoveIssue: (issueId: string, sectionId: string) => Promise<void>;
 }
 
-const COL_STYLES = [
-  { dot: "bg-gray-300",    badge: "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400",       label: "text-gray-500 dark:text-gray-400" },
-  { dot: "bg-violet-400",  badge: "bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400",    label: "text-violet-600 dark:text-violet-400" },
-  { dot: "bg-emerald-400", badge: "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400",  label: "text-emerald-600 dark:text-emerald-400" },
-  { dot: "bg-blue-400",    badge: "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400",        label: "text-blue-600 dark:text-blue-400" },
-  { dot: "bg-orange-400",  badge: "bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400",    label: "text-orange-600 dark:text-orange-400" },
+const SECTION_STYLES: Record<string, { dot: string; badge: string; label: string }> = {
+  backlog:     { dot: "bg-gray-400",    badge: "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400",                   label: "text-gray-500 dark:text-gray-400" },
+  todo:        { dot: "bg-blue-400",    badge: "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400",                 label: "text-blue-600 dark:text-blue-400" },
+  in_progress: { dot: "bg-violet-400",  badge: "bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400",         label: "text-violet-600 dark:text-violet-400" },
+  done:        { dot: "bg-emerald-400", badge: "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400",     label: "text-emerald-600 dark:text-emerald-400" },
+};
+
+const FALLBACK_STYLES = [
+  { dot: "bg-blue-400",   badge: "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400",       label: "text-blue-600 dark:text-blue-400" },
+  { dot: "bg-orange-400", badge: "bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400", label: "text-orange-600 dark:text-orange-400" },
 ];
+
+function getSectionStyle(sectionId: string, fallbackIdx: number) {
+  return SECTION_STYLES[sectionId] ?? FALLBACK_STYLES[fallbackIdx % FALLBACK_STYLES.length];
+}
 
 function sectionLabel(id: string) {
   return id.replace(/[_-]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
@@ -33,7 +41,9 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
   const inputRef = useRef<HTMLInputElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  const sectionIds = [...new Set(issues.map(i => i.section_id ?? ""))].filter(Boolean);
+  const ORDERED_SECTIONS = ["backlog", "todo", "in_progress", "done"];
+  const extraSections = issues.map(i => i.section_id ?? "").filter(s => s && !ORDERED_SECTIONS.includes(s));
+  const sectionIds = [...new Set([...ORDERED_SECTIONS, ...extraSections])];
   const filtered = issues.filter(i =>
     !search ||
     i.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -92,7 +102,7 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
   return (
     <div className="flex gap-4 p-6 overflow-x-auto h-full">
       {cols.map((sectionId, idx) => {
-        const style = COL_STYLES[idx % COL_STYLES.length];
+        const style = getSectionStyle(sectionId, idx);
         const col = sectionId === "all" ? filtered : filtered.filter(i => i.section_id === sectionId);
         const otherSections = sectionIds.filter(s => s !== sectionId);
 
@@ -140,7 +150,7 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
                         <div className="absolute left-0 top-7 z-20 w-44 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1 overflow-hidden">
                           <p className="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500 font-medium">Move to…</p>
                           {otherSections.map((s, i) => {
-                            const st = COL_STYLES[(sectionIds.indexOf(s)) % COL_STYLES.length];
+                            const st = getSectionStyle(s, sectionIds.indexOf(s));
                             return (
                               <button
                                 key={s}

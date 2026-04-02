@@ -1,19 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { Issue, STATUS_CONFIG, TYPE_ICONS, TYPE_COLORS } from "@/types";
+import { Issue, IssueStatus, STATUS_CONFIG, TYPE_ICONS, TYPE_COLORS } from "@/types";
 import CommentsSection from "./CommentsSection";
 import OttoAIPanel from "./OttoAIPanel";
 import MetadataSidebar from "./MetadataSidebar";
+
+const SECTION_TO_STATUS: Record<string, IssueStatus> = {
+  backlog: "TODO",
+  todo: "TODO",
+  in_progress: "IN_PROGRESS",
+  done: "DONE",
+};
 
 interface IssueDetailProps {
   issue: Issue;
   workspaceId: string | null;
   onBack: () => void;
+  onUpdateIssue?: (update: Partial<Issue>) => void;
 }
 
-export default function IssueDetail({ issue, workspaceId, onBack }: IssueDetailProps) {
-  const cfg = STATUS_CONFIG[issue.status];
+export default function IssueDetail({ issue, workspaceId, onBack, onUpdateIssue }: IssueDetailProps) {
+  const derivedStatus = SECTION_TO_STATUS[issue.section_id ?? ""] ?? issue.status;
+  const cfg = STATUS_CONFIG[derivedStatus];
   const [showOttoAI, setShowOttoAI] = useState(false);
 
   return (
@@ -60,7 +69,7 @@ export default function IssueDetail({ issue, workspaceId, onBack }: IssueDetailP
         {showOttoAI && <OttoAIPanel />}
       </div>
 
-      <MetadataSidebar issue={issue} />
+      <MetadataSidebar issue={issue} onUpdateIssue={onUpdateIssue} />
     </div>
   );
 }

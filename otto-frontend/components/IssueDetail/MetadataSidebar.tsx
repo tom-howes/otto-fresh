@@ -15,9 +15,10 @@ const STATIC_MEMBERS = [
 
 interface MetadataSidebarProps {
   issue: Issue;
+  onUpdateIssue?: (update: Partial<Issue>) => void;
 }
 
-export default function MetadataSidebar({ issue }: MetadataSidebarProps) {
+export default function MetadataSidebar({ issue, onUpdateIssue }: MetadataSidebarProps) {
   const [assignee, setAssignee] = useState(issue.assignee === "?" ? null : issue.assignee);
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const assigneeRef = useRef<HTMLDivElement>(null);
@@ -70,7 +71,7 @@ export default function MetadataSidebar({ issue }: MetadataSidebarProps) {
               {showAssigneePicker && (
                 <div className="absolute left-0 top-8 z-10 w-44 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1 overflow-hidden">
                   <button
-                    onClick={() => { setAssignee(null); setShowAssigneePicker(false); }}
+                    onClick={() => { setAssignee(null); setShowAssigneePicker(false); onUpdateIssue?.({ assignee: "?" }); }}
                     className="flex w-full items-center gap-2.5 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
                     <Avatar letter="?" />
@@ -79,7 +80,7 @@ export default function MetadataSidebar({ issue }: MetadataSidebarProps) {
                   {STATIC_MEMBERS.map(m => (
                     <button
                       key={m.letter}
-                      onClick={() => { setAssignee(m.letter); setShowAssigneePicker(false); }}
+                      onClick={() => { setAssignee(m.letter); setShowAssigneePicker(false); onUpdateIssue?.({ assignee: m.letter }); }}
                       className={`flex w-full items-center gap-2.5 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${assignee === m.letter ? "bg-violet-50 dark:bg-violet-900/30" : ""}`}
                     >
                       <Avatar letter={m.letter} />
