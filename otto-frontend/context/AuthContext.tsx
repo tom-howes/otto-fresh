@@ -47,40 +47,91 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 const API_BASE = "/api";
+const TOKEN_KEY = "session_token";
+const SESSION_MAX_AGE = 6 * 60 * 60; // 6 hours
+
+function getStoredToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem(TOKEN_KEY);
+}
+
+function storeToken(token: string) {
+  sessionStorage.setItem(TOKEN_KEY, token);
+  document.cookie = `session_token=${token}; path=/; max-age=${SESSION_MAX_AGE}; SameSite=Lax`;
+}
+
+function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const token = getStoredToken();
+  return fetch(url, {
+    ...options,
+    credentials: "include",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchUser = useCallback(async () => {
+  // Try to get a new session_token using the refresh_token cookie (httpOnly, sent automatically)
+  const tryRefresh = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await fetch(`${API_BASE}/users/me`, { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data);
-        return data;
-      }
-      setUser(null);
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data.token) storeToken(data.token);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const fetchUser = useCallback(async () => {
+    const attempt = async () => {
+      const res = await authFetch(`${API_BASE}/users/me`);
+      if (res.ok) return res.json();
+      if (res.status === 401) return null;
       return null;
+    };
+
+    try {
+      let data = await attempt();
+
+      // Session token expired — try refreshing once
+      if (!data) {
+        const refreshed = await tryRefresh();
+        if (refreshed) {
+          data = await attempt();
+        }
+      }
+
+      setUser(data);
+      return data;
     } catch {
       setUser(null);
       return null;
     }
-  }, []);
+  }, [tryRefresh]);
 
-  const fetchWorkspaces = useCallback(async () => {
+  const fetchWorkspaces = useCallback(async (clearOnFailure = false) => {
     try {
-      const res = await fetch(`${API_BASE}/users/me/workspaces`, { credentials: "include" });
+      const res = await authFetch(`${API_BASE}/users/me/workspaces`);
       if (res.ok) {
         const data = await res.json();
         setWorkspaces(data);
         return data;
       }
-      setWorkspaces([]);
+      if (clearOnFailure) setWorkspaces([]);
       return [];
     } catch {
-      setWorkspaces([]);
+      if (clearOnFailure) setWorkspaces([]);
       return [];
     }
   }, []);
@@ -95,14 +146,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const urlParams = new URLSearchParams(window.location.search);
       const token = urlParams.get("token");
       if (token) {
-        document.cookie = `session_token=${token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+        storeToken(token);
         const url = new URL(window.location.href);
         url.searchParams.delete("token");
         window.history.replaceState({}, "", url.toString());
       }
 
       const userData = await fetchUser();
-      if (userData) await fetchWorkspaces();
+      if (userData) await fetchWorkspaces(true);
 
       setLoading(false);
     };
@@ -114,10 +165,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await fetch(`${API_BASE}/auth/logout`, {
-      method: "POST",
-      credentials: "include",
-    });
+    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem("otto-last-workspace");
+    await authFetch(`${API_BASE}/auth/logout`, { method: "POST" });
     setUser(null);
     setWorkspaces([]);
     window.location.href = "/";

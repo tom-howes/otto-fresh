@@ -5,7 +5,7 @@ webhook sessions and login-time repo sync
 """
 from fastapi import APIRouter, Request, HTTPException, status, BackgroundTasks
 from fastapi.responses import RedirectResponse, JSONResponse
-from app.utils.auth import generate_session_token
+from app.utils.auth import generate_session_token, generate_refresh_token
 from app.services.user import get_user_by_id, create_user, update_user
 from app.routes.webhook import register_active_user, unregister_active_user
 from app.dependencies.auth import get_current_user
@@ -275,8 +275,9 @@ async def github_callback(
             detail=f"User data update failed: {str(e)}"
         )
 
-    print("\n📝 Step 4: Generating session token...")
+    print("\n📝 Step 4: Generating session and refresh tokens...")
     session_token: JWT = generate_session_token(user_id)
+    refresh_token: JWT = generate_refresh_token(user_id)
 
     print("\n📝 Step 5: Registering user for webhook processing in Firestore...")
     try:
@@ -312,9 +313,66 @@ async def github_callback(
     response.set_cookie(
         key="session_token",
         value=session_token,
+        max_age=60 * 60 * 6,  # 6 hours
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        domain=None
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
         max_age=60 * 60 * 24 * 7,  # 7 days
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
+        secure=False,
+        samesite="lax",
+        domain=None
+    )
+    return response
+
+
+@router.post("/refresh", status_code=status.HTTP_200_OK)
+async def refresh_session(request: Request) -> JSONResponse:
+    """Exchange a valid refresh_token cookie for a new session_token (6h)."""
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token")
+    try:
+        from app.utils.auth import validate_session_token
+        decoded = validate_session_token(refresh_token)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token invalid or expired")
+
+    user = await get_user_by_id(decoded["sub"])
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    new_session_token: JWT = generate_session_token(decoded["sub"])
+
+    # Refresh the webhook session — user is actively resuming their session
+    github_token = user.get("github_access_token")
+    if github_token:
+        try:
+            await register_active_user(
+                user_id=user["id"],
+                github_username=user["github_username"],
+                github_access_token=github_token,
+                installation_id=user.get("installation_id")
+            )
+        except Exception:
+            pass
+
+    response = JSONResponse(content={"token": new_session_token})
+    response.set_cookie(
+        key="session_token",
+        value=new_session_token,
+        max_age=60 * 60 * 6,
+        httponly=True,
+        secure=False,
         samesite="lax",
         domain=None
     )
@@ -340,4 +398,5 @@ async def logout(request: Request) -> JSONResponse:
 
     response = JSONResponse(content={"message": "Logged out successfully"})
     response.delete_cookie("session_token")
+    response.delete_cookie("refresh_token")
     return response

@@ -38,6 +38,7 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
   const [movingIssue, setMovingIssue] = useState<string | null>(null); // issueId showing section picker
+  const [dragOverSection, setDragOverSection] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -107,7 +108,20 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
         const otherSections = sectionIds.filter(s => s !== sectionId);
 
         return (
-          <div key={sectionId} className="w-72 shrink-0 flex flex-col">
+          <div
+            key={sectionId}
+            className={`w-72 shrink-0 flex flex-col rounded-2xl transition-colors ${dragOverSection === sectionId ? "bg-violet-50/40 dark:bg-violet-900/10 ring-2 ring-violet-200 dark:ring-violet-800" : ""}`}
+            onDragEnter={e => { e.preventDefault(); setDragOverSection(sectionId); }}
+            onDragOver={e => e.preventDefault()}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverSection(null); }}
+            onDrop={e => {
+              e.preventDefault();
+              setDragOverSection(null);
+              const issueId = e.dataTransfer.getData("issueId");
+              const fromSection = e.dataTransfer.getData("fromSection");
+              if (issueId && fromSection !== sectionId) void handleMove(issueId, sectionId);
+            }}
+          >
             {/* Column header */}
             <div className="mb-3 flex items-center gap-2">
               <div className={`h-2 w-2 rounded-full ${style.dot}`} />
@@ -121,8 +135,14 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
               {col.map(issue => (
                 <div
                   key={issue.id}
+                  draggable
+                  onDragStart={e => {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("issueId", issue.id);
+                    e.dataTransfer.setData("fromSection", sectionId);
+                  }}
                   onClick={() => onSelectIssue(issue)}
-                  className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm hover:shadow-md cursor-pointer transition-shadow"
+                  className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing transition-shadow"
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <span className={`text-xs ${TYPE_COLORS[issue.type]}`}>{TYPE_ICONS[issue.type]}</span>
@@ -149,7 +169,7 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
                       {movingIssue === issue.id && otherSections.length > 0 && (
                         <div className="absolute left-0 top-7 z-20 w-44 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1 overflow-hidden">
                           <p className="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500 font-medium">Move to…</p>
-                          {otherSections.map((s, i) => {
+                          {otherSections.map((s) => {
                             const st = getSectionStyle(s, sectionIds.indexOf(s));
                             return (
                               <button

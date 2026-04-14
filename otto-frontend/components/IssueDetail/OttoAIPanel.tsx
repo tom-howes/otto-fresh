@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import {
   ragApi, streamSSE,
   RepoWithStatus, DocType, CompleteCodeResponse, EditCodeResponse,
-  UserPreferences, RepoAccess, CommitHistoryEntry, UserPreferencesRequest,
+  RepoAccess,
 } from "@/utils/api";
 
 export default function OttoAIPanel() {
@@ -20,7 +20,6 @@ export default function OttoAIPanel() {
 
   const [codeMode, setCodeMode] = useState<"complete" | "edit">("complete");
   const [codeContext, setCodeContext] = useState("");
-  const [editInstruction, setEditInstruction] = useState("");
   const [targetFile, setTargetFile] = useState("");
   const [pushToGithub, setPushToGithub] = useState(false);
   const [completeResult, setCompleteResult] = useState<CompleteCodeResponse | null>(null);
@@ -36,10 +35,7 @@ export default function OttoAIPanel() {
   const [searchResults, setSearchResults] = useState<{ file_path: string; content: string; lines: string; language: string }[]>([]);
   const [searching, setSearching] = useState(false);
 
-  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [repoAccess, setRepoAccess] = useState<RepoAccess | null>(null);
-  const [commitHistory, setCommitHistory] = useState<CommitHistoryEntry[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     const loadRepos = async () => {
@@ -58,13 +54,8 @@ export default function OttoAIPanel() {
   useEffect(() => {
     if (!repoName || !repoName.includes("/")) return;
     const [owner, repo] = repoName.split("/");
-    setPreferences(null);
     setRepoAccess(null);
-    setCommitHistory([]);
-    setShowHistory(false);
     ragApi.checkRepoAccess(owner, repo).then(setRepoAccess).catch(() => {});
-    ragApi.getPreferences(owner, repo).then(r => setPreferences(r.preferences)).catch(() => {});
-    ragApi.getCommitHistory(owner, repo, 5).then(setCommitHistory).catch(() => {});
   }, [repoName]);
 
   const selectedRepo = repos.find(r => r.full_name === repoName);
@@ -79,7 +70,13 @@ export default function OttoAIPanel() {
       setIndexing(true);
       setAnswer("Indexing repo first, this may take a minute…");
       try {
-        await ragApi.runPipeline(repoName);
+        try {
+          await ragApi.runPipeline(repoName);
+        } catch {
+          // Retry once — first attempt can fail on cold start
+          setAnswer("Indexing in progress, retrying…");
+          await ragApi.runPipeline(repoName);
+        }
         const data = await ragApi.getAllRepos();
         setRepos(data);
       } catch (err: unknown) {
@@ -126,15 +123,6 @@ export default function OttoAIPanel() {
     }
   };
 
-  const handleSavePreference = (update: Partial<UserPreferencesRequest>) => {
-    const [owner, repo] = repoName.split("/");
-    if (!owner || !repo) return;
-    ragApi.savePreferences({ repo_full_name: repoName, ...update })
-      .then(() => ragApi.getPreferences(owner, repo))
-      .then(r => setPreferences(r.preferences))
-      .catch(() => {});
-  };
-
   const handleCodeComplete = async () => {
     if (!codeContext.trim() || !repoName.trim() || codeLoading) return;
     setCodeLoading(true);
@@ -151,11 +139,11 @@ export default function OttoAIPanel() {
   };
 
   const handleCodeEdit = async () => {
-    if (!editInstruction.trim() || !repoName.trim() || codeLoading) return;
+    if (!codeContext.trim() || !repoName.trim() || codeLoading) return;
     setCodeLoading(true);
     setEditResult(null);
     try {
-      const res = await ragApi.editCodeStream(repoName, editInstruction, targetFile || undefined, pushToGithub);
+      const res = await ragApi.editCodeStream(repoName, codeContext, targetFile || undefined, pushToGithub);
       if (!res.ok) {
         const error = await res.json().catch(() => ({ detail: "Unknown error" }));
         throw new Error(error.detail || `Request failed: ${res.status}`);
@@ -164,13 +152,13 @@ export default function OttoAIPanel() {
       for await (const event of streamSSE(res)) {
         if (event.type === "token") {
           content += event.content ?? "";
-          setEditResult({ modified_code: content, file: targetFile || "", instruction: editInstruction, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null });
+          setEditResult({ modified_code: content, file: targetFile || "", instruction: codeContext, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null });
         } else if (event.type === "error") {
           throw new Error(event.message);
         }
       }
     } catch (err: unknown) {
-      setEditResult({ modified_code: err instanceof Error ? `Error: ${err.message}` : "Something went wrong.", file: "", instruction: editInstruction, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null });
+      setEditResult({ modified_code: err instanceof Error ? `Error: ${err.message}` : "Something went wrong.", file: "", instruction: codeContext, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null });
     } finally {
       setCodeLoading(false);
     }
@@ -184,7 +172,8 @@ export default function OttoAIPanel() {
       const res = await ragApi.generateDocsStream(repoName, docType, docTarget || undefined, pushToGithub);
       if (!res.ok) {
         const error = await res.json().catch(() => ({ detail: "Unknown error" }));
-        throw new Error(error.detail || `Request failed: ${res.status}`);
+        const detail = typeof error.detail === "string" ? error.detail : `Request failed: ${res.status}`;
+        throw new Error(detail);
       }
       for await (const event of streamSSE(res)) {
         if (event.type === "token") {
@@ -251,67 +240,6 @@ export default function OttoAIPanel() {
             </div>
           </div>
 
-          {/* Preferences + history row */}
-          {repoName && repoName.includes("/") && (preferences || commitHistory.length > 0) && (
-            <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-100/80 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.02]">
-              {preferences && (
-                <button
-                  onClick={() => handleSavePreference({ favorite: !preferences.favorite })}
-                  title={preferences.favorite ? "Remove from favorites" : "Add to favorites"}
-                  className={`text-xs transition-colors ${preferences.favorite ? "text-amber-400" : "text-gray-300 dark:text-gray-600 hover:text-amber-400"}`}
-                >
-                  ★
-                </button>
-              )}
-              {preferences && (
-                <button
-                  onClick={() => handleSavePreference({ auto_push_prs: !preferences.auto_push_prs })}
-                  className={`text-xs rounded-full px-2 py-0.5 border transition-all ${
-                    preferences.auto_push_prs
-                      ? "border-violet-300 dark:border-violet-500/50 text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10"
-                      : "border-gray-200 dark:border-white/8 text-gray-400 dark:text-gray-500 hover:border-gray-300 dark:hover:border-white/15"
-                  }`}
-                >
-                  Auto PR
-                </button>
-              )}
-              {preferences && (
-                <select
-                  value={preferences.preferred_doc_type}
-                  onChange={e => handleSavePreference({ preferred_doc_type: e.target.value })}
-                  className="text-xs bg-transparent text-gray-400 dark:text-gray-500 outline-none cursor-pointer"
-                  title="Default doc type"
-                >
-                  {(["readme", "api", "technical", "user_guide"] as const).map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              )}
-              {commitHistory.length > 0 && (
-                <button
-                  onClick={() => setShowHistory(p => !p)}
-                  className="ml-auto text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                >
-                  {showHistory ? "Hide history" : `${commitHistory.length} commits ▾`}
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Commit history */}
-          {showHistory && commitHistory.length > 0 && (
-            <div className="px-4 py-2 border-b border-gray-100/80 dark:border-white/5 space-y-1">
-              {commitHistory.map((h, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-                  <span className="font-mono text-gray-300 dark:text-gray-600 shrink-0">{h.commit_sha?.slice(0, 7) ?? "—"}</span>
-                  <span className="truncate flex-1">{h.author ?? "unknown"}</span>
-                  <span className="shrink-0 text-gray-300 dark:text-gray-600">
-                    {h.processed_at ? new Date(h.processed_at).toLocaleDateString() : ""}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
 
           {/* Tab content */}
           <div className="p-5">
@@ -381,8 +309,8 @@ export default function OttoAIPanel() {
 
                 <div className="rounded-2xl border border-gray-200 dark:border-white/8 bg-gray-50 dark:bg-white/[0.03] focus-within:border-violet-300 dark:focus-within:border-violet-500/50 focus-within:shadow-md focus-within:shadow-violet-100/50 dark:focus-within:shadow-violet-900/20 transition-all overflow-hidden">
                   <textarea
-                    value={codeMode === "complete" ? codeContext : editInstruction}
-                    onChange={e => codeMode === "complete" ? setCodeContext(e.target.value) : setEditInstruction(e.target.value)}
+                    value={codeContext}
+                    onChange={e => setCodeContext(e.target.value)}
                     rows={4}
                     className="w-full bg-transparent px-4 pt-4 pb-2 text-sm text-gray-700 dark:text-gray-200 outline-none resize-none placeholder-gray-300 dark:placeholder-gray-600 leading-relaxed"
                     placeholder=""
@@ -396,11 +324,11 @@ export default function OttoAIPanel() {
                       placeholder="Target file (auto-detected if blank)" />
                     <button
                       onClick={codeMode === "complete" ? handleCodeComplete : handleCodeEdit}
-                      disabled={codeLoading || (codeMode === "complete" ? !codeContext.trim() : !editInstruction.trim())}
+                      disabled={codeLoading || !codeContext.trim()}
                       className="shrink-0 flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-blue-500 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 hover:opacity-90 active:scale-95 transition-all shadow-md shadow-violet-300/30 dark:shadow-violet-700/30">
                       {codeLoading
                         ? <span className="flex items-center gap-1.5"><span className="animate-spin inline-block w-3 h-3 border border-white/30 border-t-white rounded-full" /> Running…</span>
-                        : codeMode === "complete" ? "⚡ Run" : "✏️ Apply"}
+                        : codeMode === "complete" ? "Run" : "Apply"}
                     </button>
                   </div>
                 </div>
@@ -414,7 +342,7 @@ export default function OttoAIPanel() {
                   <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.387.6.113.82-.258.82-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.63-5.37-12-12-12z" />
                   </svg>
-                  {pushToGithub ? "✓ Will open a GitHub PR" : "Push to GitHub (creates PR)"}
+                  {pushToGithub ? "Will open a GitHub PR" : "Push to GitHub"}
                 </button>
 
                 {(completeResult || editResult) && (() => {

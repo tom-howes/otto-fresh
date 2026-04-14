@@ -10,6 +10,7 @@ from app.services.workspace import (
     get_workspace_by_join_code,
     add_member,
 )
+from app.services.user import get_user_by_id
 from app.models import User, WorkspaceCreate, WorkspaceUpdate
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
@@ -61,6 +62,28 @@ async def get_workspace_route(
             detail="Workspace not found",
         )
     return workspace
+
+
+@router.get("/{workspace_id}/members", status_code=status.HTTP_200_OK)
+async def get_workspace_members(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_workspace_member),
+):
+    """Get member profiles for a workspace. Only members can access."""
+    workspace = await get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    members = []
+    for user_id in workspace.get("member_ids", []):
+        user = await get_user_by_id(user_id)
+        if user:
+            members.append({
+                "id": user["id"],
+                "github_username": user["github_username"],
+                "avatar_url": user.get("avatar_url", ""),
+            })
+    return members
 
 
 @router.patch("/{workspace_id}", status_code=status.HTTP_200_OK)

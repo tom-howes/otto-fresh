@@ -51,4 +51,4 @@ class WorkspaceUpdate(BaseModel):
         member_ids: List of user IDs who belong to this workspace.
     """
     name: str | None = None
-    member_ids: list[UserId]
+    member_ids: list[UserId] | None = None

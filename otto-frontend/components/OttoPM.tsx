@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Issue } from "@/types";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/context/AuthContext";
@@ -8,24 +9,31 @@ import Avatar from "@/components/ui/Avatar";
 import BoardView from "@/components/BoardView";
 import BacklogView from "@/components/BacklogView";
 import IssueDetail from "@/components/IssueDetail";
-import { workspaceApi, adaptIssue } from "@/utils/api";
+import { workspaceApi, adaptIssue, BackendIssueUpdate } from "@/utils/api";
 import WorkspaceSetup from "@/components/WorkspaceSetup";
 import WorkspaceSettings from "@/components/WorkspaceSettings";
+import WorkspacePicker from "@/components/WorkspacePicker";
 
-type View = "Board" | "Issues" | "Roadmap";
-const NAV: View[] = ["Board", "Issues", "Roadmap"];
+type View = "Board" | "Issues";
+const NAV: View[] = ["Board", "Issues"];
 
 export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }) {
+  const router = useRouter();
   const [view, setView] = useState<View>(defaultView);
   const [search, setSearch] = useState("");
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const initialIssueIdRef = useRef<string | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [issuesLoading, setIssuesLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("otto-last-workspace");
+  });
   const { theme, toggle } = useTheme();
   const { user, workspaces, loading, login, logout, refetchWorkspaces } = useAuth();
 
-  const workspaceId = workspaces[0]?.id ?? null;
+  const workspaceId = selectedWorkspaceId;
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -41,6 +49,39 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
     void load();
   }, [workspaceId]);
 
+  // Capture issue ID from URL on initial mount (before sync effect runs)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    initialIssueIdRef.current = params.get("issue");
+  }, []);
+
+  // Keep URL in sync with selected issue
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (selectedIssue) {
+      url.searchParams.set("issue", selectedIssue.id);
+      window.history.replaceState({}, "", url.toString());
+    } else if (!initialIssueIdRef.current) {
+      url.searchParams.delete("issue");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [selectedIssue]);
+
+  // Restore selected issue from URL after issues finish loading
+  useEffect(() => {
+    const id = initialIssueIdRef.current;
+    if (!id || issues.length === 0) return;
+    initialIssueIdRef.current = null;
+    const found = issues.find(i => i.id === id);
+    if (found) {
+      setSelectedIssue(found);
+    } else {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("issue");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [issues]);
+
   const handleCreateIssue = async (sectionId: string, title: string) => {
     if (!workspaceId) throw new Error("No workspace found. Make sure you've created or joined a workspace.");
     const raw = await workspaceApi.createIssue(workspaceId, title.trim(), sectionId);
@@ -53,9 +94,35 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
     setIssues(prev => prev.map(i => i.id === issueId ? adaptIssue(raw) : i));
   };
 
+  const PRIORITY_TO_INT: Record<string, number> = { low: 1, medium: 2, high: 3, urgent: 4 };
+
+  const handleUpdateIssue = (update: Partial<Issue>) => {
+    if (!selectedIssue) return;
+    const updated = { ...selectedIssue, ...update };
+    setSelectedIssue(updated);
+    setIssues(prev => prev.map(i => i.id === updated.id ? updated : i));
+    if (!workspaceId) return;
+    const backendUpdate: Partial<BackendIssueUpdate> = {};
+    if ("title" in update) backendUpdate.title = update.title ?? null;
+    if ("description" in update) backendUpdate.description = update.description ?? null;
+    if ("priority" in update) backendUpdate.priority = PRIORITY_TO_INT[update.priority as string] ?? null;
+    if ("assignee" in update) backendUpdate.assignee_id = !update.assignee || update.assignee === "?" ? null : update.assignee;
+    if (Object.keys(backendUpdate).length > 0) {
+      void workspaceApi.updateIssue(workspaceId, selectedIssue.id, backendUpdate);
+    }
+  };
+
+  const handleDeleteIssue = async () => {
+    if (!selectedIssue || !workspaceId) return;
+    await workspaceApi.deleteIssue(workspaceId, selectedIssue.id);
+    setIssues(prev => prev.filter(i => i.id !== selectedIssue.id));
+    setSelectedIssue(null);
+  };
+
   const handleNav = (n: View) => {
     setView(n);
     setSelectedIssue(null);
+    router.push(n === "Board" ? "/project/board" : "/project/backlog");
   };
 
   return (
@@ -171,12 +238,12 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
           onClick={() => workspaces[0] && setShowSettings(true)}
           className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
         >
-          {workspaces[0]?.name ?? "Sample Project"}
+          {workspaces.find(w => w.id === workspaceId)?.name ?? "Sample Project"}
         </button>
         <span className="mx-1.5 text-xs text-gray-300 dark:text-gray-600">/</span>
         <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
           {selectedIssue
-            ? `${selectedIssue.id} · ${selectedIssue.title}`
+            ? selectedIssue.title
             : view === "Board" ? "Active sprints" : view === "Issues" ? "All issues" : view}
         </span>
         {workspaces[0] && (
@@ -194,30 +261,40 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
       </div>
 
       {/* Workspace settings modal */}
-      {showSettings && workspaces[0] && (
+      {showSettings && workspaceId && (
         <WorkspaceSettings
-          workspace={workspaces[0]}
+          workspace={workspaces.find(w => w.id === workspaceId) ?? workspaces[0]}
           onClose={() => setShowSettings(false)}
           onUpdated={() => { setShowSettings(false); void refetchWorkspaces(); }}
+          onWorkspaceCreatedOrJoined={refetchWorkspaces}
+          onSwitchWorkspace={(id) => { setSelectedWorkspaceId(id); localStorage.setItem("otto-last-workspace", id); setSelectedIssue(null); setIssues([]); }}
         />
       )}
 
       {/* ── Content ── */}
       <div className="flex-1 overflow-hidden">
-        {/* No workspace yet — show setup screen */}
-        {!loading && user && workspaces.length === 0 ? (
+        {/* Loading state */}
+        {loading ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="h-6 w-6 rounded-full border-2 border-violet-500 border-t-transparent animate-spin" />
+          </div>
+        ) : !loading && !user ? (
+          <div className="flex h-full items-center justify-center">
+            <p className="text-sm text-gray-400 dark:text-gray-500">Sign in with GitHub to get started.</p>
+          </div>
+        ) : !loading && user && workspaces.length === 0 ? (
           <WorkspaceSetup onDone={refetchWorkspaces} />
+        ) : !loading && user && !workspaceId ? (
+          <WorkspacePicker workspaces={workspaces} onSelect={(id) => {
+            setSelectedWorkspaceId(id);
+            localStorage.setItem("otto-last-workspace", id);
+          }} />
         ) : selectedIssue ? (
-          <IssueDetail issue={selectedIssue} workspaceId={workspaceId} onBack={() => setSelectedIssue(null)} />
-        ) : workspaces.length > 0 ? (
+          <IssueDetail issue={selectedIssue} workspaceId={workspaceId} onBack={() => setSelectedIssue(null)} onUpdateIssue={handleUpdateIssue} onDeleteIssue={handleDeleteIssue} />
+        ) : workspaceId ? (
           <>
             {view === "Board"  && <BoardView   issues={issues} loading={issuesLoading} search={search} onSelectIssue={setSelectedIssue} onCreateIssue={handleCreateIssue} onMoveIssue={handleMoveIssue} />}
             {view === "Issues" && <BacklogView issues={issues} loading={issuesLoading} search={search} onSelectIssue={setSelectedIssue} onCreateIssue={handleCreateIssue} />}
-            {view === "Roadmap" && (
-              <div className="flex items-center justify-center h-full text-gray-300 dark:text-gray-600 text-sm">
-                Roadmap — coming soon
-              </div>
-            )}
           </>
         ) : null}
       </div>
