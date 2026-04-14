@@ -111,7 +111,7 @@ class AskResponse(BaseModel):
 
 class GenerateDocsRequest(BaseModel):
     repo_full_name: str
-    target: str
+    target: Optional[str] = None
     doc_type: str = "api"
     github_token: str
     push_to_github: bool = False
@@ -454,8 +454,9 @@ async def generate_docs(request: GenerateDocsRequest):
         rag.github_client = GitHubClient(request.github_token)
 
         repo_path = get_shared_repo_path(request.repo_full_name)
+        target = request.target or request.repo_full_name
         result = rag.generate_documentation(
-            target=request.target,
+            target=target,
             repo_path=repo_path,
             doc_type=request.doc_type,
             stream=False,
@@ -666,10 +667,11 @@ async def generate_docs_stream(request: GenerateDocsRequest):
         rag.github_client = GitHubClient(request.github_token)
 
         repo_path = get_shared_repo_path(request.repo_full_name)
+        target = request.target or request.repo_full_name
 
         # stream=True returns dict with 'documentation_stream' generator
         result = rag.generate_documentation(
-            target=request.target,
+            target=target,
             repo_path=repo_path,
             doc_type=request.doc_type,
             stream=True,
@@ -680,13 +682,26 @@ async def generate_docs_stream(request: GenerateDocsRequest):
         stream_gen = result.get('documentation_stream')
 
         async def generate():
+            full_docs = ""
             try:
                 if stream_gen is not None:
                     for token in stream_gen:
                         if token:
+                            full_docs += token
                             yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
                             await asyncio.sleep(0)
-                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+
+                if request.push_to_github and full_docs:
+                    github_result = rag.github_client.push_documentation(
+                        repo_path=request.repo_full_name,
+                        doc_content=full_docs,
+                        doc_name=target,
+                        doc_type=request.doc_type,
+                        create_pr=True
+                    )
+                    yield f"data: {json.dumps({'type': 'complete', 'github': github_result})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'complete'})}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
@@ -727,15 +742,29 @@ async def edit_code_stream(request: CodeEditRequest):
                 error_gen(), media_type="text/event-stream")
 
         stream_gen = result.get('modified_code_stream')
+        target_file = result.get('file')
 
         async def generate():
+            full_code = ""
             try:
                 if stream_gen is not None:
                     for token in stream_gen:
                         if token:
+                            full_code += token
                             yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
                             await asyncio.sleep(0)
-                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+
+                if request.push_to_github and full_code and target_file:
+                    clean_repo = request.repo_full_name.replace('repos/', '')
+                    github_result = rag.github_client.create_branch_and_push_code(
+                        repo_path=clean_repo,
+                        file_path=target_file,
+                        new_content=full_code,
+                        instruction=request.instruction
+                    )
+                    yield f"data: {json.dumps({'type': 'complete', 'github': github_result})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'complete'})}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 

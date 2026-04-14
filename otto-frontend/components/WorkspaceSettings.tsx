@@ -8,14 +8,54 @@ interface Props {
   workspace: Workspace;
   onClose: () => void;
   onUpdated: (newName: string) => void;
+  onWorkspaceCreatedOrJoined?: () => Promise<void>;
+  onSwitchWorkspace?: (id: string) => void;
 }
 
-export default function WorkspaceSettings({ workspace, onClose, onUpdated }: Props) {
+export default function WorkspaceSettings({ workspace, onClose, onUpdated, onWorkspaceCreatedOrJoined, onSwitchWorkspace }: Props) {
   const [name, setName] = useState(workspace.name);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"settings" | "create" | "join">("settings");
+  const [newWorkspaceName, setNewWorkspaceName] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [createdJoinCode, setCreatedJoinCode] = useState<string | null>(null);
+  const [createdCodeCopied, setCreatedCodeCopied] = useState(false);
+
+  const handleCreateWorkspace = async () => {
+    if (!newWorkspaceName.trim() || actionLoading) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const created = await workspaceApi.create(newWorkspaceName.trim());
+      await onWorkspaceCreatedOrJoined?.();
+      setCreatedJoinCode(created.join_code);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to create workspace");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleJoinWorkspace = async () => {
+    if (!joinCode.trim() || actionLoading) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const joined = await workspaceApi.join(joinCode.trim());
+      await onWorkspaceCreatedOrJoined?.();
+      onSwitchWorkspace?.(joined.id);
+      onClose();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Invalid join code");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const handleSaveName = async () => {
     if (!name.trim()) return;
@@ -51,11 +91,95 @@ export default function WorkspaceSettings({ workspace, onClose, onUpdated }: Pro
           onClick={onClose}
           className="absolute right-4 top-4 text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 text-lg leading-none"
         >
-          ×
+          
         </button>
 
-        <h2 className="text-sm font-bold text-gray-800 dark:text-gray-100 mb-6">Workspace Settings</h2>
+        <h2 className="text-sm font-bold text-gray-800 dark:text-gray-100 mb-4">Workspace Settings</h2>
 
+        {/* Tabs */}
+        <div className="flex rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden mb-5">
+          {(["settings", "create", "join"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => { setTab(t); setActionError(null); }}
+              className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                tab === t
+                  ? "bg-violet-50 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400"
+                  : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+              }`}
+            >
+              {t === "settings" ? "Current" : t === "create" ? "New" : "Join"}
+            </button>
+          ))}
+        </div>
+
+        {/* Create tab */}
+        {tab === "create" && (
+          createdJoinCode ? (
+            <div className="space-y-3">
+              <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-500/30 p-3 text-center">
+                <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Workspace created!</p>
+                <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-0.5">Share this invite code with teammates:</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                  <span className="text-sm font-mono tracking-widest text-gray-700 dark:text-gray-200">{createdJoinCode}</span>
+                </div>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(createdJoinCode); setCreatedCodeCopied(true); setTimeout(() => setCreatedCodeCopied(false), 2000); }}
+                  className={`rounded-lg border px-3 py-2 text-xs font-medium transition-all ${createdCodeCopied ? "border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400"}`}
+                >
+                  {createdCodeCopied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <button onClick={onClose} className="w-full rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                Done
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <input
+                value={newWorkspaceName}
+                onChange={e => setNewWorkspaceName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && void handleCreateWorkspace()}
+                placeholder="Workspace name"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100 outline-none placeholder-gray-400 focus:border-violet-400 transition-colors"
+              />
+              {actionError && <p className="text-xs text-red-500">{actionError}</p>}
+              <button
+                onClick={() => void handleCreateWorkspace()}
+                disabled={actionLoading || !newWorkspaceName.trim()}
+                className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-blue-500 px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {actionLoading ? "Creating…" : "Create workspace"}
+              </button>
+            </div>
+          )
+        )}
+
+        {/* Join tab */}
+        {tab === "join" && (
+          <div className="space-y-3">
+            <input
+              value={joinCode}
+              onChange={e => setJoinCode(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && void handleJoinWorkspace()}
+              placeholder="Enter invite code"
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100 outline-none placeholder-gray-400 focus:border-violet-400 transition-colors font-mono tracking-widest"
+            />
+            {actionError && <p className="text-xs text-red-500">{actionError}</p>}
+            <button
+              onClick={() => void handleJoinWorkspace()}
+              disabled={actionLoading || !joinCode.trim()}
+              className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-blue-500 px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+            >
+              {actionLoading ? "Joining…" : "Join workspace"}
+            </button>
+          </div>
+        )}
+
+        {/* Settings tab */}
+        {tab === "settings" && (<>
         {/* Name */}
         <div className="mb-5">
           <label className="block text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
@@ -139,6 +263,7 @@ export default function WorkspaceSettings({ workspace, onClose, onUpdated }: Pro
             {workspace.member_ids.length} member{workspace.member_ids.length !== 1 ? "s" : ""}
           </p>
         </div>
+        </>)}
       </div>
     </div>
   );

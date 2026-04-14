@@ -266,7 +266,7 @@ class AskQuestionResponse(BaseModel):
 
 class GenerateDocsRequest(BaseModel):
     repo_full_name: str
-    target: str
+    target: Optional[str] = None
     doc_type: str = "api"
     push_to_github: bool = False
 

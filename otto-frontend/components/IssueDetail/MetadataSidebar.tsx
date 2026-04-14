@@ -4,21 +4,19 @@ import { useState, useRef, useEffect } from "react";
 import { Issue } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 
-const STATIC_MEMBERS = [
-  { letter: "S", name: "Shloka" },
-  { letter: "M", name: "Malav" },
-  { letter: "P", name: "Paschal" },
-  { letter: "A", name: "Ayushman" },
-  { letter: "T", name: "Tom" },
-  { letter: "SC", name: "Sahil" },
-];
+interface Member {
+  id: string;
+  github_username: string;
+  avatar_url: string;
+}
 
 interface MetadataSidebarProps {
   issue: Issue;
+  members: Member[];
   onUpdateIssue?: (update: Partial<Issue>) => void;
 }
 
-export default function MetadataSidebar({ issue, onUpdateIssue }: MetadataSidebarProps) {
+export default function MetadataSidebar({ issue, members, onUpdateIssue }: MetadataSidebarProps) {
   const [assignee, setAssignee] = useState(issue.assignee === "?" ? null : issue.assignee);
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const assigneeRef = useRef<HTMLDivElement>(null);
@@ -42,6 +40,8 @@ export default function MetadataSidebar({ issue, onUpdateIssue }: MetadataSideba
     TODO: "To Do", IN_PROGRESS: "In Progress", DONE: "Done",
   };
 
+  const assignedMember = members.find(m => m.id === assignee || m.github_username === assignee);
+
   return (
     <div className="w-56 shrink-0 p-5 space-y-5 bg-gray-50/50 dark:bg-gray-900/50">
       {[
@@ -61,15 +61,19 @@ export default function MetadataSidebar({ issue, onUpdateIssue }: MetadataSideba
                 onClick={() => setShowAssigneePicker(p => !p)}
                 className="flex items-center gap-2 hover:opacity-80 transition-opacity"
               >
-                <Avatar letter={assignee ?? "?"} />
+                {assignedMember?.avatar_url ? (
+                  <img src={assignedMember.avatar_url} alt={assignedMember.github_username} className="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-700" />
+                ) : (
+                  <Avatar letter={assignedMember?.github_username?.[0]?.toUpperCase() ?? "?"} />
+                )}
                 <span className="text-xs text-gray-600 dark:text-gray-300 truncate">
-                  {assignee
-                    ? STATIC_MEMBERS.find(m => m.letter === assignee)?.name ?? assignee
+                  {assignedMember
+                    ? assignedMember.github_username
                     : <span className="text-gray-400 dark:text-gray-500">Unassigned</span>}
                 </span>
               </button>
               {showAssigneePicker && (
-                <div className="absolute left-0 top-8 z-10 w-44 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1 overflow-hidden">
+                <div className="absolute left-0 top-8 z-10 w-48 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1 overflow-hidden">
                   <button
                     onClick={() => { setAssignee(null); setShowAssigneePicker(false); onUpdateIssue?.({ assignee: "?" }); }}
                     className="flex w-full items-center gap-2.5 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
@@ -77,15 +81,19 @@ export default function MetadataSidebar({ issue, onUpdateIssue }: MetadataSideba
                     <Avatar letter="?" />
                     <span className="text-xs text-gray-400 dark:text-gray-500">Unassigned</span>
                   </button>
-                  {STATIC_MEMBERS.map(m => (
+                  {members.map(m => (
                     <button
-                      key={m.letter}
-                      onClick={() => { setAssignee(m.letter); setShowAssigneePicker(false); onUpdateIssue?.({ assignee: m.letter }); }}
-                      className={`flex w-full items-center gap-2.5 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${assignee === m.letter ? "bg-violet-50 dark:bg-violet-900/30" : ""}`}
+                      key={m.id}
+                      onClick={() => { setAssignee(m.id); setShowAssigneePicker(false); onUpdateIssue?.({ assignee: m.id }); }}
+                      className={`flex w-full items-center gap-2.5 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${assignee === m.id ? "bg-violet-50 dark:bg-violet-900/30" : ""}`}
                     >
-                      <Avatar letter={m.letter} />
-                      <span className="text-xs text-gray-700 dark:text-gray-300">{m.name}</span>
-                      {assignee === m.letter && <span className="ml-auto text-violet-500 text-xs">✓</span>}
+                      {m.avatar_url ? (
+                        <img src={m.avatar_url} alt={m.github_username} className="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-700" />
+                      ) : (
+                        <Avatar letter={m.github_username[0].toUpperCase()} />
+                      )}
+                      <span className="text-xs text-gray-700 dark:text-gray-300">{m.github_username}</span>
+                      {assignee === m.id && <span className="ml-auto text-violet-500 text-xs">✓</span>}
                     </button>
                   ))}
                 </div>

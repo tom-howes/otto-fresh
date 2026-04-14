@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.dependencies.auth import get_current_user
 from app.services.user import get_user_by_id, update_user, get_user_workspaces
 from app.models import User, UserRead, UserUpdate, Workspace
+from app.routes.webhook import register_active_user
 
 router = APIRouter(prefix="/users", tags=["User"])
 
@@ -16,6 +17,17 @@ async def get_me(current_user: User = Depends(get_current_user)) -> UserRead:
     Returns:
         The current user's public profile data.
     """
+    github_token = current_user.get("github_access_token")
+    if github_token:
+        try:
+            await register_active_user(
+                user_id=current_user["id"],
+                github_username=current_user["github_username"],
+                github_access_token=github_token,
+                installation_id=current_user.get("installation_id")
+            )
+        except Exception:
+            pass
     return UserRead(**current_user)
 
 

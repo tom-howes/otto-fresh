@@ -32,7 +32,7 @@ async def register_active_user(user_id: str, github_username: str, github_access
         'github_access_token': github_access_token,
         'installation_id': installation_id,
         'logged_in_at': datetime.now().isoformat(),
-        'expires_at': (datetime.now() + timedelta(days=7)).isoformat(),
+        'expires_at': (datetime.now() + timedelta(hours=6)).isoformat(),
         'updated_at': datetime.now().isoformat()
     }
 
@@ -385,6 +385,12 @@ async def _handle_push_event(
         return {"status": "ignored", "reason": "Not a branch push", "ref": ref}
 
     branch = ref.replace("refs/heads/", "")
+
+    # Only process pushes to the default (main) branch
+    default_branch = repo_data.get("default_branch", "main")
+    if branch != default_branch:
+        print(f"Ignoring push to non-default branch: {branch} (default: {default_branch})")
+        return {"status": "ignored", "reason": f"Push to {branch}, only {default_branch} triggers re-indexing"}
 
     print(f"\n📌 Push event details:")
     print(f"   Repo: {repo_full_name}")

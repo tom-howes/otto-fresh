@@ -59,6 +59,9 @@ export const workspaceApi = {
   get: (workspaceId: string) =>
     apiFetch<BackendWorkspace>(`/workspaces/${workspaceId}`),
 
+  getMembers: (workspaceId: string) =>
+    apiFetch<{ id: string; github_username: string; avatar_url: string }[]>(`/workspaces/${workspaceId}/members`),
+
   update: (workspaceId: string, update: { name?: string; member_ids?: string[] }) =>
     apiFetch<BackendWorkspace>(`/workspaces/${workspaceId}`, {
       method: "PATCH",

@@ -2,19 +2,31 @@ import { SSEEvent } from "./types";
 
 const API_URL = "/api";
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = sessionStorage.getItem("session_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...getAuthHeaders(),
       ...options.headers,
     },
   });
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `Request failed: ${res.status}`);
+    const detail = typeof error.detail === "string"
+      ? error.detail
+      : Array.isArray(error.detail)
+        ? error.detail.map((e: { msg: string }) => e.msg).join(", ")
+        : `Request failed: ${res.status}`;
+    throw new Error(detail);
   }
 
   return res.json();
@@ -24,7 +36,7 @@ export function streamFetch(path: string, body: object): Promise<Response> {
   return fetch(`${API_URL}${path}`, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(body),
   });
 }
