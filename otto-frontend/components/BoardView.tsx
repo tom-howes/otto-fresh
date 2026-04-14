@@ -4,13 +4,21 @@ import { useState, useRef, useEffect } from "react";
 import { Issue, PRIORITY_COLORS, TYPE_ICONS, TYPE_COLORS } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 
+interface Member {
+  id: string;
+  github_username: string;
+  avatar_url: string;
+}
+
 interface BoardViewProps {
   issues: Issue[];
   loading: boolean;
   search: string;
+  members?: Member[];
   onSelectIssue: (issue: Issue) => void;
   onCreateIssue: (sectionId: string, title: string) => Promise<void>;
   onMoveIssue: (issueId: string, sectionId: string) => Promise<void>;
+  onDeleteIssue: (issueId: string) => Promise<void>;
 }
 
 const SECTION_STYLES: Record<string, { dot: string; badge: string; label: string }> = {
@@ -25,6 +33,8 @@ const FALLBACK_STYLES = [
   { dot: "bg-orange-400", badge: "bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400", label: "text-orange-600 dark:text-orange-400" },
 ];
 
+const PRIORITY_ORDER: Record<string, number> = { urgent: 4, high: 3, medium: 2, low: 1 };
+
 function getSectionStyle(sectionId: string, fallbackIdx: number) {
   return SECTION_STYLES[sectionId] ?? FALLBACK_STYLES[fallbackIdx % FALLBACK_STYLES.length];
 }
@@ -33,12 +43,14 @@ function sectionLabel(id: string) {
   return id.replace(/[_-]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
-export default function BoardView({ issues, loading, search, onSelectIssue, onCreateIssue, onMoveIssue }: BoardViewProps) {
+export default function BoardView({ issues, loading, search, members = [], onSelectIssue, onCreateIssue, onMoveIssue, onDeleteIssue }: BoardViewProps) {
   const [creatingIn, setCreatingIn] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
   const [movingIssue, setMovingIssue] = useState<string | null>(null); // issueId showing section picker
   const [dragOverSection, setDragOverSection] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -85,9 +97,9 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
 
   if (loading) {
     return (
-      <div className="flex gap-4 p-6 overflow-x-auto h-full">
+      <div className="grid grid-cols-3 gap-3 p-4 h-full overflow-auto content-start">
         {[0, 1, 2].map(i => (
-          <div key={i} className="w-72 shrink-0">
+          <div key={i}>
             <div className="mb-3 h-4 w-24 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
             <div className="space-y-2">
               {[0, 1].map(j => (
@@ -101,16 +113,20 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
   }
 
   return (
-    <div className="flex gap-4 p-6 overflow-x-auto h-full">
+    <div
+      className="grid gap-3 p-4 h-full overflow-auto content-start"
+      style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(200px, 1fr))` }}
+    >
       {cols.map((sectionId, idx) => {
         const style = getSectionStyle(sectionId, idx);
-        const col = sectionId === "all" ? filtered : filtered.filter(i => i.section_id === sectionId);
+        const col = (sectionId === "all" ? filtered : filtered.filter(i => i.section_id === sectionId))
+          .slice().sort((a, b) => (PRIORITY_ORDER[b.priority] ?? 0) - (PRIORITY_ORDER[a.priority] ?? 0));
         const otherSections = sectionIds.filter(s => s !== sectionId);
 
         return (
           <div
             key={sectionId}
-            className={`w-72 shrink-0 flex flex-col rounded-2xl transition-colors ${dragOverSection === sectionId ? "bg-violet-50/40 dark:bg-violet-900/10 ring-2 ring-violet-200 dark:ring-violet-800" : ""}`}
+            className={`flex flex-col rounded-2xl border transition-colors ${dragOverSection === sectionId ? "bg-violet-50/40 dark:bg-violet-900/10 border-violet-200 dark:border-violet-800 ring-2 ring-violet-200 dark:ring-violet-800" : "border-gray-100 dark:border-gray-800"}`}
             onDragEnter={e => { e.preventDefault(); setDragOverSection(sectionId); }}
             onDragOver={e => e.preventDefault()}
             onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverSection(null); }}
@@ -123,7 +139,7 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
             }}
           >
             {/* Column header */}
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mb-3 flex items-center gap-2 px-3 pt-3">
               <div className={`h-2 w-2 rounded-full ${style.dot}`} />
               <span className={`text-xs font-semibold ${style.label}`}>
                 {sectionId === "all" ? "All Issues" : sectionLabel(sectionId)}
@@ -131,23 +147,55 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
               <span className="ml-auto text-xs text-gray-300 dark:text-gray-600">{col.length}</span>
             </div>
 
-            <div className="space-y-2 flex-1">
+            <div className="space-y-2 flex-1 px-3 pb-3">
               {col.map(issue => (
                 <div
                   key={issue.id}
-                  draggable
+                  draggable={confirmDeleteId !== issue.id}
                   onDragStart={e => {
                     e.dataTransfer.effectAllowed = "move";
                     e.dataTransfer.setData("issueId", issue.id);
                     e.dataTransfer.setData("fromSection", sectionId);
                   }}
-                  onClick={() => onSelectIssue(issue)}
-                  className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing transition-shadow"
+                  onClick={() => confirmDeleteId !== issue.id && onSelectIssue(issue)}
+                  className="group rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing transition-shadow"
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <span className={`text-xs ${TYPE_COLORS[issue.type]}`}>{TYPE_ICONS[issue.type]}</span>
                     <span className="font-mono text-xs text-gray-300 dark:text-gray-500 truncate max-w-[7rem]">{issue.id.slice(0, 8)}</span>
                     <div className={`ml-auto h-1.5 w-1.5 rounded-full ${PRIORITY_COLORS[issue.priority]}`} />
+                    {/* Delete button */}
+                    {confirmDeleteId === issue.id ? (
+                      <div className="flex items-center gap-1.5 ml-1" onClick={e => e.stopPropagation()}>
+                        <span className="text-xs text-red-400">Delete?</span>
+                        <button
+                          onClick={async () => {
+                            setDeleting(true);
+                            try { await onDeleteIssue(issue.id); } finally { setDeleting(false); setConfirmDeleteId(null); }
+                          }}
+                          disabled={deleting}
+                          className="text-xs font-medium text-white bg-red-500 hover:bg-red-600 px-2 py-0.5 rounded-md transition-colors disabled:opacity-50"
+                        >
+                          {deleting ? "…" : "Yes"}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={e => { e.stopPropagation(); setConfirmDeleteId(issue.id); }}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-300 dark:text-gray-600 hover:text-red-400 dark:hover:text-red-400 transition-all"
+                        title="Delete issue"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                   <p className="text-sm font-medium leading-snug mb-3 text-gray-800 dark:text-gray-100">
                     {issue.title}
@@ -185,7 +233,12 @@ export default function BoardView({ issues, loading, search, onSelectIssue, onCr
                         </div>
                       )}
                     </div>
-                    <Avatar letter={issue.assignee} />
+                    {(() => {
+                      const m = members.find(m => String(m.id) === String(issue.assignee_id ?? ""));
+                      return m?.avatar_url
+                        ? <img src={m.avatar_url} alt={m.github_username} className="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-700 shrink-0" />
+                        : <Avatar letter={m?.github_username?.[0]?.toUpperCase() ?? issue.assignee} />;
+                    })()}
                   </div>
                 </div>
               ))}

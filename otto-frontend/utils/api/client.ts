@@ -29,6 +29,9 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     throw new Error(detail);
   }
 
+  // 204 No Content (e.g. DELETE) — no body to parse
+  if (res.status === 204) return undefined as T;
+
   return res.json();
 }
 

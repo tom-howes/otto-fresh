@@ -5,7 +5,6 @@ import { Issue, IssueStatus, STATUS_CONFIG, TYPE_ICONS, TYPE_COLORS } from "@/ty
 import CommentsSection from "./CommentsSection";
 import OttoAIPanel from "./OttoAIPanel";
 import MetadataSidebar from "./MetadataSidebar";
-import { workspaceApi } from "@/utils/api";
 
 const SECTION_TO_STATUS: Record<string, IssueStatus> = {
   backlog: "TODO",
@@ -14,22 +13,31 @@ const SECTION_TO_STATUS: Record<string, IssueStatus> = {
   done: "DONE",
 };
 
+interface Member {
+  id: string;
+  github_username: string;
+  avatar_url: string;
+}
+
 interface IssueDetailProps {
   issue: Issue;
   workspaceId: string | null;
+  members?: Member[];
+  initialComments?: import("@/utils/api").BackendComment[];
   onBack: () => void;
   onUpdateIssue?: (update: Partial<Issue>) => void;
   onDeleteIssue?: () => Promise<void>;
 }
 
-export default function IssueDetail({ issue, workspaceId, onBack, onUpdateIssue, onDeleteIssue }: IssueDetailProps) {
+export default function IssueDetail({ issue, workspaceId, members: membersProp, initialComments, onBack, onUpdateIssue, onDeleteIssue }: IssueDetailProps) {
   const derivedStatus = SECTION_TO_STATUS[issue.section_id ?? ""] ?? issue.status;
   const cfg = STATUS_CONFIG[derivedStatus];
-  const [showOttoAI, setShowOttoAI] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("otto-ai-panel-open") === "true";
-  });
-  const [members, setMembers] = useState<{ id: string; github_username: string; avatar_url: string }[]>([]);
+  const [showOttoAI, setShowOttoAI] = useState(false);
+
+  useEffect(() => {
+    setShowOttoAI(localStorage.getItem("otto-ai-panel-open") === "true");
+  }, []);
+  const [members, setMembers] = useState<Member[]>(membersProp ?? []);
 
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(issue.title);
@@ -41,10 +49,10 @@ export default function IssueDetail({ issue, workspaceId, onBack, onUpdateIssue,
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Sync members when the prop updates (e.g. workspace changes)
   useEffect(() => {
-    if (!workspaceId) return;
-    workspaceApi.getMembers(workspaceId).then(setMembers).catch(() => {});
-  }, [workspaceId]);
+    if (membersProp) setMembers(membersProp);
+  }, [membersProp]);
 
   // Sync drafts when navigating to a different issue
   useEffect(() => {
@@ -213,7 +221,7 @@ export default function IssueDetail({ issue, workspaceId, onBack, onUpdateIssue,
           </div>
         )}
 
-        <CommentsSection workspaceId={workspaceId} issueId={issue.id} />
+        <CommentsSection workspaceId={workspaceId} issueId={issue.id} members={members} initialComments={initialComments} />
 
         {showOttoAI && <OttoAIPanel />}
       </div>

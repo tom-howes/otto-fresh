@@ -5,11 +5,10 @@ import { useRouter } from "next/navigation";
 import { Issue } from "@/types";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/context/AuthContext";
-import Avatar from "@/components/ui/Avatar";
 import BoardView from "@/components/BoardView";
 import BacklogView from "@/components/BacklogView";
 import IssueDetail from "@/components/IssueDetail";
-import { workspaceApi, adaptIssue, BackendIssueUpdate } from "@/utils/api";
+import { workspaceApi, adaptIssue, BackendIssueUpdate, BackendComment } from "@/utils/api";
 import WorkspaceSetup from "@/components/WorkspaceSetup";
 import WorkspaceSettings from "@/components/WorkspaceSettings";
 import WorkspacePicker from "@/components/WorkspacePicker";
@@ -25,29 +24,63 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
   const initialIssueIdRef = useRef<string | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [issuesLoading, setIssuesLoading] = useState(false);
+  const [members, setMembers] = useState<{ id: string; github_username: string; avatar_url: string }[]>([]);
+  const [commentsCache, setCommentsCache] = useState<Record<string, BackendComment[]>>({});
   const [showSettings, setShowSettings] = useState(false);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem("otto-last-workspace");
-  });
+  const [showWorkspaceSwitcher, setShowWorkspaceSwitcher] = useState(false);
+  const switcherRef = useRef<HTMLDivElement>(null);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+
+  // Read from localStorage after mount to avoid SSR/hydration mismatch
+  useEffect(() => {
+    const saved = localStorage.getItem("otto-last-workspace");
+    if (saved) setSelectedWorkspaceId(saved);
+  }, []);
   const { theme, toggle } = useTheme();
-  const { user, workspaces, loading, login, logout, refetchWorkspaces } = useAuth();
+  const { user, workspaces, loading, login, logout, refetchWorkspaces, updateWorkspace } = useAuth();
 
   const workspaceId = selectedWorkspaceId;
+  const userId = user?.id ?? null;
+
+  const switchWorkspace = (id: string) => {
+    setSelectedWorkspaceId(id);
+    localStorage.setItem("otto-last-workspace", id);
+    setSelectedIssue(null);
+    setIssues([]);
+    setShowWorkspaceSwitcher(false);
+  };
+
+  // Close workspace switcher on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (switcherRef.current && !switcherRef.current.contains(e.target as Node)) {
+        setShowWorkspaceSwitcher(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   useEffect(() => {
-    if (!workspaceId) return;
+    // Wait for auth to complete — on page refresh, sessionStorage is cleared and
+    // the token isn't restored until after AuthContext finishes its init. Firing
+    // before userId is set would send an unauthenticated request that silently fails.
+    if (!workspaceId || !userId) return;
     const load = async () => {
       setIssuesLoading(true);
       try {
-        const res = await workspaceApi.getIssues(workspaceId);
+        const [res, memberList] = await Promise.all([
+          workspaceApi.getIssues(workspaceId),
+          workspaceApi.getMembers(workspaceId),
+        ]);
         setIssues((res.issues ?? []).map(adaptIssue));
-      } catch { /* silent */ } finally {
+        setMembers(memberList);
+      } catch (err) { console.error("[OttoPM] load failed:", err); } finally {
         setIssuesLoading(false);
       }
     };
     void load();
-  }, [workspaceId]);
+  }, [workspaceId, userId]);
 
   // Capture issue ID from URL on initial mount (before sync effect runs)
   useEffect(() => {
@@ -106,17 +139,29 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
     if ("title" in update) backendUpdate.title = update.title ?? null;
     if ("description" in update) backendUpdate.description = update.description ?? null;
     if ("priority" in update) backendUpdate.priority = PRIORITY_TO_INT[update.priority as string] ?? null;
-    if ("assignee" in update) backendUpdate.assignee_id = !update.assignee || update.assignee === "?" ? null : update.assignee;
+    if ("assignee_id" in update) backendUpdate.assignee_id = update.assignee_id ?? null;
     if (Object.keys(backendUpdate).length > 0) {
-      void workspaceApi.updateIssue(workspaceId, selectedIssue.id, backendUpdate);
+      workspaceApi.updateIssue(workspaceId, selectedIssue.id, backendUpdate).catch(() => {});
     }
   };
 
-  const handleDeleteIssue = async () => {
-    if (!selectedIssue || !workspaceId) return;
-    await workspaceApi.deleteIssue(workspaceId, selectedIssue.id);
-    setIssues(prev => prev.filter(i => i.id !== selectedIssue.id));
-    setSelectedIssue(null);
+  const handleDeleteIssue = async (issueId: string) => {
+    if (!workspaceId) return;
+    // Remove from UI immediately, then call API
+    setIssues(prev => prev.filter(i => i.id !== issueId));
+    if (selectedIssue?.id === issueId) setSelectedIssue(null);
+    workspaceApi.deleteIssue(workspaceId, issueId).catch(err => {
+      console.error("[OttoPM] deleteIssue failed:", err);
+    });
+  };
+
+  const handleSelectIssue = (issue: Issue) => {
+    setSelectedIssue(issue);
+    if (workspaceId && !commentsCache[issue.id]) {
+      workspaceApi.getComments(workspaceId, issue.id)
+        .then(res => setCommentsCache(prev => ({ ...prev, [issue.id]: res.comments ?? [] })))
+        .catch(() => {});
+    }
   };
 
   const handleNav = (n: View) => {
@@ -173,18 +218,6 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
             />
           </div>
 
-          {/* Team avatars */}
-          <div className="flex -space-x-1.5">
-            {["S", "M", "P", "A"].map(l => <Avatar key={l} letter={l} />)}
-          </div>
-
-          {/* Filters */}
-          {["Epic ▾", "Type ▾"].map(f => (
-            <button key={f} className="rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              {f}
-            </button>
-          ))}
-
           <div className="h-4 w-px bg-gray-100 dark:bg-gray-700" />
 
           {/* Dark mode toggle */}
@@ -234,30 +267,74 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
 
       {/* ── Sub-header ── */}
       <div className="flex h-9 shrink-0 items-center border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 px-5">
-        <button
-          onClick={() => workspaces[0] && setShowSettings(true)}
-          className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-        >
-          {workspaces.find(w => w.id === workspaceId)?.name ?? "Sample Project"}
-        </button>
+        {/* Workspace name / switcher */}
+        <div className="relative" ref={switcherRef}>
+          <button
+            onClick={() => workspaces.length > 0 && setShowWorkspaceSwitcher(p => !p)}
+            className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          >
+            {workspaces.find(w => w.id === workspaceId)?.name ?? "Sample Project"}
+            {workspaces.length > 0 && (
+              <svg className="h-3 w-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            )}
+          </button>
+
+          {showWorkspaceSwitcher && (
+            <div className="absolute left-0 top-7 z-30 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1 overflow-hidden">
+              <p className="px-3 py-1.5 text-xs font-medium text-gray-400 dark:text-gray-500">Workspaces</p>
+              {workspaces.map(w => (
+                <button
+                  key={w.id}
+                  onClick={() => switchWorkspace(w.id)}
+                  className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors ${
+                    w.id === workspaceId
+                      ? "bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400"
+                      : "hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  }`}
+                >
+                  <div className="h-5 w-5 rounded-md bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                    {w.name[0]?.toUpperCase() ?? "W"}
+                  </div>
+                  <span className="flex-1 text-xs truncate">{w.name}</span>
+                  {w.id === workspaceId && (
+                    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+              <div className="border-t border-gray-100 dark:border-gray-800 mt-1 pt-1">
+                <button
+                  onClick={() => { setShowWorkspaceSwitcher(false); setShowSettings(true); }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Workspace settings
+                </button>
+                <button
+                  onClick={() => { setShowWorkspaceSwitcher(false); setShowSettings(true); }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  New / Join workspace
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <span className="mx-1.5 text-xs text-gray-300 dark:text-gray-600">/</span>
         <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
           {selectedIssue
             ? selectedIssue.title
             : view === "Board" ? "Active sprints" : view === "Issues" ? "All issues" : view}
         </span>
-        {workspaces[0] && (
-          <button
-            onClick={() => setShowSettings(true)}
-            className="ml-auto text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 transition-colors"
-            title="Workspace settings"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-        )}
       </div>
 
       {/* Workspace settings modal */}
@@ -265,9 +342,12 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
         <WorkspaceSettings
           workspace={workspaces.find(w => w.id === workspaceId) ?? workspaces[0]}
           onClose={() => setShowSettings(false)}
-          onUpdated={() => { setShowSettings(false); void refetchWorkspaces(); }}
+          onUpdated={(newName) => {
+            setShowSettings(false);
+            if (workspaceId) updateWorkspace(workspaceId, { name: newName });
+          }}
           onWorkspaceCreatedOrJoined={refetchWorkspaces}
-          onSwitchWorkspace={(id) => { setSelectedWorkspaceId(id); localStorage.setItem("otto-last-workspace", id); setSelectedIssue(null); setIssues([]); }}
+          onSwitchWorkspace={switchWorkspace}
         />
       )}
 
@@ -290,11 +370,11 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
             localStorage.setItem("otto-last-workspace", id);
           }} />
         ) : selectedIssue ? (
-          <IssueDetail issue={selectedIssue} workspaceId={workspaceId} onBack={() => setSelectedIssue(null)} onUpdateIssue={handleUpdateIssue} onDeleteIssue={handleDeleteIssue} />
+          <IssueDetail issue={selectedIssue} workspaceId={workspaceId} members={members} initialComments={commentsCache[selectedIssue.id]} onBack={() => setSelectedIssue(null)} onUpdateIssue={handleUpdateIssue} onDeleteIssue={() => handleDeleteIssue(selectedIssue.id)} />
         ) : workspaceId ? (
           <>
-            {view === "Board"  && <BoardView   issues={issues} loading={issuesLoading} search={search} onSelectIssue={setSelectedIssue} onCreateIssue={handleCreateIssue} onMoveIssue={handleMoveIssue} />}
-            {view === "Issues" && <BacklogView issues={issues} loading={issuesLoading} search={search} onSelectIssue={setSelectedIssue} onCreateIssue={handleCreateIssue} />}
+            {view === "Board"  && <BoardView   issues={issues} loading={issuesLoading} search={search} members={members} onSelectIssue={handleSelectIssue} onCreateIssue={handleCreateIssue} onMoveIssue={handleMoveIssue} onDeleteIssue={handleDeleteIssue} />}
+            {view === "Issues" && <BacklogView issues={issues} loading={issuesLoading} search={search} members={members} onSelectIssue={handleSelectIssue} onCreateIssue={handleCreateIssue} onDeleteIssue={handleDeleteIssue} />}
           </>
         ) : null}
       </div>

@@ -6,6 +6,8 @@ const PRIORITY_MAP: Record<number, "urgent" | "high" | "medium" | "low"> = {
 };
 
 export function adaptIssue(raw: BackendIssue): import("@/types").Issue {
+  // Coerce IDs to strings — backend may return numeric GitHub user IDs at runtime
+  const assigneeId = raw.assignee_id != null ? String(raw.assignee_id) : null;
   return {
     id: raw.id,
     title: raw.title,
@@ -14,9 +16,9 @@ export function adaptIssue(raw: BackendIssue): import("@/types").Issue {
     status: "TODO",
     type: "task",
     priority: PRIORITY_MAP[raw.priority] ?? "medium",
-    assignee: raw.assignee_id ? raw.assignee_id.slice(0, 1).toUpperCase() : "?",
-    assignee_id: raw.assignee_id,
-    reporter_id: raw.reporter_id,
+    assignee: assigneeId ? assigneeId.slice(0, 1).toUpperCase() : "?",
+    assignee_id: assigneeId,
+    reporter_id: raw.reporter_id != null ? String(raw.reporter_id) : undefined,
     position: raw.position,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
