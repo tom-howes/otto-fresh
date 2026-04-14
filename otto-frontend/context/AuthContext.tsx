@@ -33,6 +33,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   refetchUser: () => Promise<void>;
   refetchWorkspaces: () => Promise<void>;
+  updateWorkspace: (id: string, updates: Partial<Workspace>) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -44,6 +45,7 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
   refetchUser: async () => {},
   refetchWorkspaces: async () => {},
+  updateWorkspace: () => {},
 });
 
 const API_BASE = "/api";
@@ -160,6 +162,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     init();
   }, [fetchUser, fetchWorkspaces]);
 
+  const updateWorkspace = useCallback((id: string, updates: Partial<Workspace>) => {
+    setWorkspaces(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w));
+  }, []);
+
   const login = () => {
     window.location.href = `${API_BASE}/auth/login`;
   };
@@ -177,7 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{
       user, workspaces, loading,
       isAuthenticated: !!user,
-      login, logout,
+      login, logout, updateWorkspace,
       refetchUser: fetchUser,
       refetchWorkspaces: fetchWorkspaces,
     }}>

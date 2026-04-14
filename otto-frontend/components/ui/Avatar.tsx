@@ -14,10 +14,11 @@ interface AvatarProps {
 }
 
 export default function Avatar({ letter, size = "sm" }: AvatarProps) {
-  const isUnassigned = !letter || letter === "?";
+  const safeStr = typeof letter === "string" ? letter : "";
+  const isUnassigned = !safeStr || safeStr === "?";
   const colorClass = isUnassigned
     ? "bg-gray-100 dark:bg-gray-800 border border-dashed border-gray-300 dark:border-gray-600"
-    : AVATAR_COLORS[letter.charCodeAt(0) % AVATAR_COLORS.length];
+    : AVATAR_COLORS[safeStr.charCodeAt(0) % AVATAR_COLORS.length];
   return (
     <div
       className={`${colorClass} ${
@@ -30,7 +31,7 @@ export default function Avatar({ letter, size = "sm" }: AvatarProps) {
         <svg className={size === "lg" ? "h-4 w-4" : "h-3 w-3"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
         </svg>
-      ) : letter}
+      ) : safeStr[0]}
     </div>
   );
 }

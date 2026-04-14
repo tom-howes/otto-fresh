@@ -4,19 +4,27 @@ import { useState, useRef } from "react";
 import { Issue, STATUS_CONFIG, PRIORITY_COLORS, TYPE_ICONS, TYPE_COLORS } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 
+interface Member {
+  id: string;
+  github_username: string;
+  avatar_url: string;
+}
+
 interface BacklogViewProps {
   issues: Issue[];
   loading: boolean;
   search: string;
+  members?: Member[];
   onSelectIssue: (issue: Issue) => void;
   onCreateIssue: (sectionId: string, title: string) => Promise<void>;
+  onDeleteIssue: (issueId: string) => Promise<void>;
 }
 
 function sectionLabel(section_id: string) {
   return section_id.replace(/[_-]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
-export default function BacklogView({ issues, loading, search, onSelectIssue, onCreateIssue }: BacklogViewProps) {
+export default function BacklogView({ issues, loading, search, members = [], onSelectIssue, onCreateIssue, onDeleteIssue }: BacklogViewProps) {
   const PRESET_SECTIONS = ["backlog", "todo", "in_progress", "in_review", "done"];
 
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -25,6 +33,8 @@ export default function BacklogView({ issues, loading, search, onSelectIssue, on
   const [newSection, setNewSection] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const toggle = (key: string) => setOpen(o => ({ ...o, [key]: !o[key] }));
 
@@ -152,8 +162,8 @@ export default function BacklogView({ issues, loading, search, onSelectIssue, on
               {group.issues.map((issue, i) => (
                 <div
                   key={issue.id}
-                  onClick={() => onSelectIssue(issue)}
-                  className={`flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors ${i !== 0 ? "border-t border-gray-50 dark:border-gray-700" : ""}`}
+                  onClick={() => confirmDeleteId !== issue.id && onSelectIssue(issue)}
+                  className={`group flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors ${i !== 0 ? "border-t border-gray-50 dark:border-gray-700" : ""}`}
                 >
                   <span className={`text-xs ${TYPE_COLORS[issue.type]}`}>{TYPE_ICONS[issue.type]}</span>
                   <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${PRIORITY_COLORS[issue.priority]}`} />
@@ -162,7 +172,44 @@ export default function BacklogView({ issues, loading, search, onSelectIssue, on
                   <div className={`rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0 ${STATUS_CONFIG[issue.status].badge}`}>
                     {group.label}
                   </div>
-                  <Avatar letter={issue.assignee} />
+                  {(() => {
+                    const m = members.find(m => String(m.id) === String(issue.assignee_id ?? ""));
+                    return m?.avatar_url
+                      ? <img src={m.avatar_url} alt={m.github_username} className="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-700 shrink-0" />
+                      : <Avatar letter={m?.github_username?.[0]?.toUpperCase() ?? issue.assignee} />;
+                  })()}
+                  {/* Delete */}
+                  {confirmDeleteId === issue.id ? (
+                    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                      <span className="text-xs text-red-400">Delete?</span>
+                      <button
+                        onClick={async () => {
+                          setDeleting(true);
+                          try { await onDeleteIssue(issue.id); } finally { setDeleting(false); setConfirmDeleteId(null); }
+                        }}
+                        disabled={deleting}
+                        className="text-xs font-medium text-white bg-red-500 hover:bg-red-600 px-2 py-0.5 rounded-md transition-colors disabled:opacity-50"
+                      >
+                        {deleting ? "…" : "Yes"}
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); setConfirmDeleteId(null); }}
+                        className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={e => { e.stopPropagation(); setConfirmDeleteId(issue.id); }}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 dark:text-gray-600 hover:text-red-400 dark:hover:text-red-400 transition-all shrink-0"
+                      title="Delete issue"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

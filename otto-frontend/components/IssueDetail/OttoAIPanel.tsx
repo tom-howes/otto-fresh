@@ -1,11 +1,44 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import {
   ragApi, streamSSE,
   RepoWithStatus, DocType, CompleteCodeResponse, EditCodeResponse,
   RepoAccess,
 } from "@/utils/api";
+
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      components={{
+        h1: ({ children }) => <h1 className="text-base font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2 first:mt-0">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-sm font-bold text-gray-800 dark:text-gray-100 mt-3 mb-1.5 first:mt-0">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mt-3 mb-1 first:mt-0">{children}</h3>,
+        p: ({ children }) => <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-2 last:mb-0">{children}</p>,
+        ul: ({ children }) => <ul className="space-y-1 mb-2 pl-4 last:mb-0">{children}</ul>,
+        ol: ({ children }) => <ol className="space-y-1 mb-2 pl-4 list-decimal last:mb-0">{children}</ol>,
+        li: ({ children }) => <li className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed list-disc marker:text-violet-400">{children}</li>,
+        strong: ({ children }) => <strong className="font-semibold text-gray-800 dark:text-gray-100">{children}</strong>,
+        em: ({ children }) => <em className="italic text-gray-600 dark:text-gray-400">{children}</em>,
+        code: ({ children, className }) => {
+          const isBlock = className?.includes("language-");
+          return isBlock ? (
+            <code className="block w-full overflow-x-auto rounded-lg bg-gray-900 dark:bg-black/40 px-4 py-3 text-xs text-emerald-300 font-mono leading-relaxed whitespace-pre">{children}</code>
+          ) : (
+            <code className="rounded-md bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-600 dark:text-violet-300">{children}</code>
+          );
+        },
+        pre: ({ children }) => <pre className="mb-2 last:mb-0">{children}</pre>,
+        blockquote: ({ children }) => <blockquote className="border-l-2 border-violet-300 dark:border-violet-500/50 pl-3 my-2 text-sm text-gray-500 dark:text-gray-400 italic">{children}</blockquote>,
+        hr: () => <hr className="my-3 border-gray-100 dark:border-white/10" />,
+        a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-violet-600 dark:text-violet-400 underline underline-offset-2 hover:opacity-80">{children}</a>,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
 
 export default function OttoAIPanel() {
   const [question, setQuestion] = useState("");
@@ -269,7 +302,7 @@ export default function OttoAIPanel() {
                       <span className="text-xs font-semibold text-violet-700 dark:text-violet-300">Answer</span>
                     </div>
                     <div className="p-4">
-                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{answer}</p>
+                      <MarkdownContent content={answer} />
                       {sources.length > 0 && (
                         <div className="mt-4 pt-3 border-t border-gray-100 dark:border-white/5 space-y-1.5">
                           <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mb-2">Sources</p>
@@ -367,7 +400,7 @@ export default function OttoAIPanel() {
                           </a>
                         )}
                       </div>
-                      <pre className="p-4 text-xs text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto bg-[#fafafa] dark:bg-[#0a0a0e]">{code}</pre>
+                      <pre className="p-4 text-xs text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap leading-relaxed max-h-[36rem] overflow-y-auto bg-[#fafafa] dark:bg-[#0a0a0e]">{code}</pre>
                     </div>
                   );
                 })()}
@@ -427,7 +460,9 @@ export default function OttoAIPanel() {
                       <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
                       <span className="text-xs text-gray-400 dark:text-gray-500 font-mono truncate">{repoName.split("/")[1]}</span>
                     </div>
-                    <pre className="p-4 text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto bg-[#fafafa] dark:bg-[#0a0a0e]">{docsResult}</pre>
+                    <div className="p-4 max-h-[36rem] overflow-y-auto">
+                      <MarkdownContent content={docsResult} />
+                    </div>
                   </div>
                 )}
               </div>
@@ -464,7 +499,7 @@ export default function OttoAIPanel() {
                       <div className="flex h-4 w-4 items-center justify-center rounded-md bg-gradient-to-br from-violet-500 to-blue-500 text-white text-[9px] font-black">✦</div>
                       <span className="text-xs font-semibold text-violet-700 dark:text-violet-300">{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}</span>
                     </div>
-                    <div className="divide-y divide-gray-100 dark:divide-white/5 max-h-72 overflow-y-auto">
+                    <div className="divide-y divide-gray-100 dark:divide-white/5 max-h-[36rem] overflow-y-auto">
                       {searchResults.map((r, i) => (
                         <div key={i} className="px-4 py-3">
                           <div className="flex items-center gap-2 mb-1.5">

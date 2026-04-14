@@ -3,31 +3,61 @@
 import { useState, useEffect } from "react";
 import Avatar from "@/components/ui/Avatar";
 import { workspaceApi, BackendComment } from "@/utils/api";
+import { useAuth } from "@/context/AuthContext";
+
+interface Member {
+  id: string;
+  github_username: string;
+  avatar_url: string;
+}
 
 interface CommentsSectionProps {
   workspaceId: string | null;
   issueId: string;
+  members?: Member[];
+  initialComments?: BackendComment[];
 }
 
-export default function CommentsSection({ workspaceId, issueId }: CommentsSectionProps) {
-  const [comments, setComments] = useState<BackendComment[]>([]);
+function CommentAvatar({ authorId, members, fallbackLetter }: { authorId: string; members: Member[]; fallbackLetter: string }) {
+  const m = members.find(m => String(m.id) === String(authorId));
+  if (m?.avatar_url) {
+    return <img src={m.avatar_url} alt={m.github_username} className="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-700 shrink-0" />;
+  }
+  return <Avatar letter={m?.github_username?.[0]?.toUpperCase() ?? fallbackLetter} />;
+}
+
+export default function CommentsSection({ workspaceId, issueId, members = [], initialComments }: CommentsSectionProps) {
+  const { user } = useAuth();
+  const [comments, setComments] = useState<BackendComment[]>(initialComments ?? []);
   const [newComment, setNewComment] = useState("");
   const [commentPosting, setCommentPosting] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentText, setEditCommentText] = useState("");
   const [commentEditing, setCommentEditing] = useState(false);
 
+  // Sync when initialComments arrive (pre-fetched by parent)
   useEffect(() => {
-    if (!workspaceId) return;
+    if (initialComments) setComments(initialComments);
+  }, [initialComments]);
+
+  // Fallback fetch if parent hasn't pre-fetched yet
+  useEffect(() => {
+    if (initialComments !== undefined || !workspaceId) return;
     workspaceApi.getComments(workspaceId, issueId)
       .then(res => setComments(res.comments ?? []))
       .catch(() => {});
-  }, [workspaceId, issueId]);
+  }, [workspaceId, issueId, initialComments]);
 
   const handleAddComment = async () => {
     if (!newComment.trim() || !workspaceId || commentPosting) return;
     const tempId = `temp-${Date.now()}`;
-    const optimistic = { id: tempId, content: newComment.trim(), author_id: "?", created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    const optimistic: BackendComment = {
+      id: tempId,
+      content: newComment.trim(),
+      author_id: String(user?.id ?? "?"),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
     setComments(prev => [...prev, optimistic]);
     setNewComment("");
     setCommentPosting(true);
@@ -66,7 +96,7 @@ export default function CommentsSection({ workspaceId, issueId }: CommentsSectio
       <div className="space-y-3 mb-4">
         {comments.map(c => (
           <div key={c.id} className="flex items-start gap-3 group">
-            <Avatar letter={String(c.author_id ?? "?").slice(0, 1).toUpperCase()} />
+            <CommentAvatar authorId={c.author_id} members={members} fallbackLetter={String(c.author_id ?? "?").slice(0, 1).toUpperCase()} />
             <div className="flex-1">
               {editingCommentId === c.id ? (
                 <div className="space-y-1.5">
