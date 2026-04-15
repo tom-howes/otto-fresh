@@ -21,7 +21,7 @@ export default function InstallPage() {
   };
 
   const handleSkip = () => {
-    router.replace("/project/board");
+    router.replace("/project/backlog");
   };
 
   return (

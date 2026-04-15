@@ -186,7 +186,7 @@ async def github_callback(
                 print("⚠️  No session cookie found — cannot save installation_id")
         except Exception as e:
             print(f"⚠️  Could not save installation_id: {e}")
-        return RedirectResponse(f"{frontend_url}/project/board")
+        return RedirectResponse(f"{frontend_url}/project/backlog")
 
     # ---------------------------------------------------------------
     # Case: Normal OAuth flow — code is required
@@ -301,7 +301,7 @@ async def github_callback(
 
     # Determine redirect — pass token so frontend can set cookie
     if has_installation:
-        redirect_url = f"{frontend_url}/project/board?token={session_token}"
+        redirect_url = f"{frontend_url}/project/backlog?token={session_token}"
     else:
         redirect_url = f"{frontend_url}/auth/install?token={session_token}"
 

@@ -55,24 +55,30 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
   const [pushToGithub, setPushToGithub] = useState(false);
   const [completeResult, setCompleteResult] = useState<CompleteCodeResponse | null>(null);
   const [editResult, setEditResult] = useState<EditCodeResponse | null>(null);
-  const [codeLoading, setCodeLoading] = useState(false);
 
   const [docType, setDocType] = useState<DocType>("readme");
   const [docTarget, setDocTarget] = useState("");
   const [docsResult, setDocsResult] = useState("");
-  const [docsLoading, setDocsLoading] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ file_path: string; content: string; lines: string; language: string }[]>([]);
-  const [searching, setSearching] = useState(false);
 
   const [repoAccess, setRepoAccess] = useState<RepoAccess | null>(null);
+  
 
   const { startJob, appendChunk, finishJob, getJob } = useJobs();
   const existingJob = getJob(issueId, "qa");
   const [answer, setAnswer] = useState(existingJob?.answer ?? "");
   const [asking, setAsking] = useState(existingJob?.status === "running");
   const [sources, setSources] = useState<{ file: string; lines: string }[]>([]);
+
+  const codeJob = getJob(issueId, "code");
+  const docsJob = getJob(issueId, "docs");
+  const searchJob = getJob(issueId, "search");
+
+  const [codeLoading, setCodeLoading] = useState(codeJob?.status === "running");
+  const [docsLoading, setDocsLoading] = useState(docsJob?.status === "running");
+  const [searching, setSearching] = useState(searchJob?.status === "running");
 
   useEffect(() => {
     const qaJob = getJob(issueId, "qa");
@@ -85,9 +91,11 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
     }
 
     const searchJob = getJob(issueId, "search");
+    setSearching(searchJob?.status === "running");
     if (searchJob?.searchResults) setSearchResults(searchJob.searchResults);
 
     const codeJob = getJob(issueId, "code");
+    setCodeLoading(codeJob?.status === "running");
     if (codeJob?.codeResult) {
       const result = codeJob.codeResult as CompleteCodeResponse | EditCodeResponse;
       if ("completion" in result) {
@@ -98,6 +106,7 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
     }
 
     const docsJob = getJob(issueId, "docs");
+    setDocsLoading(docsJob?.status === "running");
     if (docsJob?.docsResult) setDocsResult(docsJob.docsResult);
   }, [issueId]);
 
