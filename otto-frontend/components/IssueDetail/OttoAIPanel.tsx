@@ -53,62 +53,38 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
   const [codeContext, setCodeContext] = useState("");
   const [targetFile, setTargetFile] = useState("");
   const [pushToGithub, setPushToGithub] = useState(false);
-  const [completeResult, setCompleteResult] = useState<CompleteCodeResponse | null>(null);
-  const [editResult, setEditResult] = useState<EditCodeResponse | null>(null);
 
   const [docType, setDocType] = useState<DocType>("readme");
   const [docTarget, setDocTarget] = useState("");
-  const [docsResult, setDocsResult] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<{ file_path: string; content: string; lines: string; language: string }[]>([]);
 
   const [repoAccess, setRepoAccess] = useState<RepoAccess | null>(null);
   
 
   const { startJob, appendChunk, finishJob, getJob } = useJobs();
   const existingJob = getJob(issueId, "qa");
-  const [answer, setAnswer] = useState(existingJob?.answer ?? "");
-  const [asking, setAsking] = useState(existingJob?.status === "running");
+  const qaJob = getJob(issueId, "qa");
+  const answer = qaJob?.answer ?? "";
+  const asking = qaJob?.status === "running";
   const [sources, setSources] = useState<{ file: string; lines: string }[]>([]);
 
   const codeJob = getJob(issueId, "code");
   const docsJob = getJob(issueId, "docs");
   const searchJob = getJob(issueId, "search");
 
-  const [codeLoading, setCodeLoading] = useState(codeJob?.status === "running");
-  const [docsLoading, setDocsLoading] = useState(docsJob?.status === "running");
-  const [searching, setSearching] = useState(searchJob?.status === "running");
+  const codeLoading = codeJob?.status === "running";
+  const docsLoading = docsJob?.status === "running";
+  const searching = searchJob?.status === "running";
 
-  useEffect(() => {
-    const qaJob = getJob(issueId, "qa");
-    if (qaJob) {
-      setAnswer(qaJob.answer);
-      setAsking(qaJob.status === "running");
-    } else {
-      setAnswer("");
-      setAsking(false);
-    }
+  const codeResult = codeJob?.codeResult as CompleteCodeResponse | EditCodeResponse | null ?? null;
+  const completeResult = codeResult && "completion" in codeResult ? codeResult as CompleteCodeResponse : null;
+  const editResult = codeResult && "modified_code" in codeResult ? codeResult as EditCodeResponse : null;
+  const docsResult = docsJob?.docsResult ?? "";
+  const searchResults = searchJob?.searchResults ?? [];
 
-    const searchJob = getJob(issueId, "search");
-    setSearching(searchJob?.status === "running");
-    if (searchJob?.searchResults) setSearchResults(searchJob.searchResults);
 
-    const codeJob = getJob(issueId, "code");
-    setCodeLoading(codeJob?.status === "running");
-    if (codeJob?.codeResult) {
-      const result = codeJob.codeResult as CompleteCodeResponse | EditCodeResponse;
-      if ("completion" in result) {
-        setCompleteResult(result as CompleteCodeResponse);
-      } else {
-        setEditResult(result as EditCodeResponse);
-      }
-    }
-
-    const docsJob = getJob(issueId, "docs");
-    setDocsLoading(docsJob?.status === "running");
-    if (docsJob?.docsResult) setDocsResult(docsJob.docsResult);
-  }, [issueId]);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     const loadRepos = async () => {
@@ -136,23 +112,21 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
 
   const handleAsk = async () => {
     if (!question.trim() || !repoName.trim() || asking || indexing) return;
-    setAnswer("");
     setSources([]);
+    setErrorMessage("");
 
     if (!isReady) {
       setIndexing(true);
-      setAnswer("Indexing repo first, this may take a minute…");
       try {
         try {
           await ragApi.runPipeline(repoName);
         } catch {
-          setAnswer("Indexing in progress, retrying…");
           await ragApi.runPipeline(repoName);
         }
         const data = await ragApi.getAllRepos();
         setRepos(data);
       } catch (err: unknown) {
-        setAnswer(err instanceof Error ? `Indexing failed: ${err.message}` : "Indexing failed.");
+        setErrorMessage(err instanceof Error ? `Indexing failed: ${err.message}` : "Indexing failed.");
         setIndexing(false);
         return;
       }
@@ -160,8 +134,6 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
     }
 
     const jobId = startJob(issueId, issueTitle, question, "qa");
-    setAsking(true);
-    setAnswer("");
     try {
       const res = await ragApi.askStream(repoName, question);
       if (!res.ok) {
@@ -170,11 +142,7 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
       }
       for await (const event of streamSSE(res)) {
         if (event.type === "token") {
-          setAnswer(prev => {
-            const next = prev + (event.content ?? "");
-            appendChunk(jobId, event.content ?? "");
-            return next;
-          });
+          appendChunk(jobId, event.content ?? "");
         } else if (event.type === "complete") {
           setSources(event.sources || []);
         } else if (event.type === "error") {
@@ -183,52 +151,36 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
       }
       finishJob(jobId, "done");
     } catch (err: unknown) {
-      setAnswer(err instanceof Error ? `Error: ${err.message}` : "Something went wrong.");
+      setErrorMessage(err instanceof Error ? `Error: ${err.message}` : "Something went wrong.");
       finishJob(jobId, "error");
-    } finally {
-      setAsking(false);
     }
   };
 
   const handleSearch = async () => {
     if (!searchQuery.trim() || !repoName || searching) return;
-    setSearching(true);
-    setSearchResults([]);
     const jobId = startJob(issueId, issueTitle, searchQuery, "search");
     try {
       const res = await ragApi.search(repoName, searchQuery);
-      setSearchResults(res.results);
       finishJob(jobId, "done", { searchResults: res.results });
     } catch {
       finishJob(jobId, "error");
-    } finally {
-      setSearching(false);
     }
   };
 
   const handleCodeComplete = async () => {
     if (!codeContext.trim() || !repoName.trim() || codeLoading) return;
-    setCodeLoading(true);
-    setCompleteResult(null);
     const jobId = startJob(issueId, issueTitle, codeContext, "code");
     try {
       const detectedLang = selectedRepo?.language?.toLowerCase() || undefined;
       const res = await ragApi.completeCode(repoName, codeContext, detectedLang, targetFile || undefined, pushToGithub);
-      setCompleteResult(res);
       finishJob(jobId, "done", { codeResult: res });
     } catch (err: unknown) {
-      const errorResult = { completion: err instanceof Error ? `Error: ${err.message}` : "Something went wrong.", language: "", confidence: 0, detected_file: null, detection_confidence: null, github_pr: null, pushed_by: null };
-      setCompleteResult(errorResult);
-      finishJob(jobId, "error", { codeResult: errorResult });
-    } finally {
-      setCodeLoading(false);
+      finishJob(jobId, "error");
     }
   };
 
   const handleCodeEdit = async () => {
     if (!codeContext.trim() || !repoName.trim() || codeLoading) return;
-    setCodeLoading(true);
-    setEditResult(null);
     const jobId = startJob(issueId, issueTitle, codeContext, "code");
     try {
       const res = await ragApi.editCodeStream(repoName, codeContext, targetFile || undefined, pushToGithub);
@@ -240,27 +192,19 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
       for await (const event of streamSSE(res)) {
         if (event.type === "token") {
           content += event.content ?? "";
-          const partial = { modified_code: content, file: targetFile || "", instruction: codeContext, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null };
-          setEditResult(partial);
+          finishJob(jobId, "running", { codeResult: { modified_code: content, file: targetFile || "", instruction: codeContext, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null } });
         } else if (event.type === "error") {
           throw new Error(event.message);
         }
       }
-      const finalResult = { modified_code: content, file: targetFile || "", instruction: codeContext, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null };
-      finishJob(jobId, "done", { codeResult: finalResult });
+      finishJob(jobId, "done", { codeResult: { modified_code: content, file: targetFile || "", instruction: codeContext, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null } });
     } catch (err: unknown) {
-      const errorResult = { modified_code: err instanceof Error ? `Error: ${err.message}` : "Something went wrong.", file: "", instruction: codeContext, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null };
-      setEditResult(errorResult);
-      finishJob(jobId, "error", { codeResult: errorResult });
-    } finally {
-      setCodeLoading(false);
+      finishJob(jobId, "error");
     }
   };
 
   const handleGenerateDocs = async () => {
     if (!repoName.trim() || docsLoading) return;
-    setDocsLoading(true);
-    setDocsResult("");
     const jobId = startJob(issueId, issueTitle, docType, "docs");
     try {
       const res = await ragApi.generateDocsStream(repoName, docType, docTarget || undefined, pushToGithub);
@@ -273,18 +217,14 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
       for await (const event of streamSSE(res)) {
         if (event.type === "token") {
           content += event.content ?? "";
-          setDocsResult(content);
+          finishJob(jobId, "running", { docsResult: content });
         } else if (event.type === "error") {
           throw new Error(event.message);
         }
       }
       finishJob(jobId, "done", { docsResult: content });
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? `Error: ${err.message}` : "Something went wrong.";
-      setDocsResult(errorMsg);
-      finishJob(jobId, "error", { docsResult: errorMsg });
-    } finally {
-      setDocsLoading(false);
+      finishJob(jobId, "error");
     }
   };
 
