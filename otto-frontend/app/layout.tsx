@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/context/AuthContext";
+import { JobsProvider } from "@/context/JobsContext";
 
 export const metadata: Metadata = {
   title: "Otto PM",
@@ -17,7 +18,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ThemeProvider>
           <AuthProvider>
-            {children}
+            <JobsProvider>
+              {children}
+            </JobsProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

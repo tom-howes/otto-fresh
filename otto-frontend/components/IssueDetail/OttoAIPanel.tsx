@@ -7,6 +7,7 @@ import {
   RepoWithStatus, DocType, CompleteCodeResponse, EditCodeResponse,
   RepoAccess,
 } from "@/utils/api";
+import { useJobs } from "@/context/JobsContext";
 
 function MarkdownContent({ content }: { content: string }) {
   return (
@@ -40,12 +41,9 @@ function MarkdownContent({ content }: { content: string }) {
   );
 }
 
-export default function OttoAIPanel() {
+export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; issueTitle: string }) {
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
-  const [sources, setSources] = useState<{ file: string; lines: string }[]>([]);
   const [activeTab, setActiveTab] = useState<"qa" | "code" | "docs" | "search">("qa");
-  const [asking, setAsking] = useState(false);
   const [repoName, setRepoName] = useState("");
   const [repos, setRepos] = useState<RepoWithStatus[]>([]);
   const [reposLoading, setReposLoading] = useState(false);
@@ -69,6 +67,39 @@ export default function OttoAIPanel() {
   const [searching, setSearching] = useState(false);
 
   const [repoAccess, setRepoAccess] = useState<RepoAccess | null>(null);
+
+  const { startJob, appendChunk, finishJob, getJob } = useJobs();
+  const existingJob = getJob(issueId, "qa");
+  const [answer, setAnswer] = useState(existingJob?.answer ?? "");
+  const [asking, setAsking] = useState(existingJob?.status === "running");
+  const [sources, setSources] = useState<{ file: string; lines: string }[]>([]);
+
+  useEffect(() => {
+    const qaJob = getJob(issueId, "qa");
+    if (qaJob) {
+      setAnswer(qaJob.answer);
+      setAsking(qaJob.status === "running");
+    } else {
+      setAnswer("");
+      setAsking(false);
+    }
+
+    const searchJob = getJob(issueId, "search");
+    if (searchJob?.searchResults) setSearchResults(searchJob.searchResults);
+
+    const codeJob = getJob(issueId, "code");
+    if (codeJob?.codeResult) {
+      const result = codeJob.codeResult as CompleteCodeResponse | EditCodeResponse;
+      if ("completion" in result) {
+        setCompleteResult(result as CompleteCodeResponse);
+      } else {
+        setEditResult(result as EditCodeResponse);
+      }
+    }
+
+    const docsJob = getJob(issueId, "docs");
+    if (docsJob?.docsResult) setDocsResult(docsJob.docsResult);
+  }, [issueId]);
 
   useEffect(() => {
     const loadRepos = async () => {
@@ -106,7 +137,6 @@ export default function OttoAIPanel() {
         try {
           await ragApi.runPipeline(repoName);
         } catch {
-          // Retry once — first attempt can fail on cold start
           setAnswer("Indexing in progress, retrying…");
           await ragApi.runPipeline(repoName);
         }
@@ -120,6 +150,7 @@ export default function OttoAIPanel() {
       setIndexing(false);
     }
 
+    const jobId = startJob(issueId, issueTitle, question, "qa");
     setAsking(true);
     setAnswer("");
     try {
@@ -130,15 +161,21 @@ export default function OttoAIPanel() {
       }
       for await (const event of streamSSE(res)) {
         if (event.type === "token") {
-          setAnswer(prev => prev + (event.content ?? ""));
+          setAnswer(prev => {
+            const next = prev + (event.content ?? "");
+            appendChunk(jobId, event.content ?? "");
+            return next;
+          });
         } else if (event.type === "complete") {
           setSources(event.sources || []);
         } else if (event.type === "error") {
           throw new Error(event.message);
         }
       }
+      finishJob(jobId, "done");
     } catch (err: unknown) {
       setAnswer(err instanceof Error ? `Error: ${err.message}` : "Something went wrong.");
+      finishJob(jobId, "error");
     } finally {
       setAsking(false);
     }
@@ -148,10 +185,14 @@ export default function OttoAIPanel() {
     if (!searchQuery.trim() || !repoName || searching) return;
     setSearching(true);
     setSearchResults([]);
+    const jobId = startJob(issueId, issueTitle, searchQuery, "search");
     try {
       const res = await ragApi.search(repoName, searchQuery);
       setSearchResults(res.results);
-    } catch { /* silent */ } finally {
+      finishJob(jobId, "done", { searchResults: res.results });
+    } catch {
+      finishJob(jobId, "error");
+    } finally {
       setSearching(false);
     }
   };
@@ -160,12 +201,16 @@ export default function OttoAIPanel() {
     if (!codeContext.trim() || !repoName.trim() || codeLoading) return;
     setCodeLoading(true);
     setCompleteResult(null);
+    const jobId = startJob(issueId, issueTitle, codeContext, "code");
     try {
       const detectedLang = selectedRepo?.language?.toLowerCase() || undefined;
       const res = await ragApi.completeCode(repoName, codeContext, detectedLang, targetFile || undefined, pushToGithub);
       setCompleteResult(res);
+      finishJob(jobId, "done", { codeResult: res });
     } catch (err: unknown) {
-      setCompleteResult({ completion: err instanceof Error ? `Error: ${err.message}` : "Something went wrong.", language: "", confidence: 0, detected_file: null, detection_confidence: null, github_pr: null, pushed_by: null });
+      const errorResult = { completion: err instanceof Error ? `Error: ${err.message}` : "Something went wrong.", language: "", confidence: 0, detected_file: null, detection_confidence: null, github_pr: null, pushed_by: null };
+      setCompleteResult(errorResult);
+      finishJob(jobId, "error", { codeResult: errorResult });
     } finally {
       setCodeLoading(false);
     }
@@ -175,6 +220,7 @@ export default function OttoAIPanel() {
     if (!codeContext.trim() || !repoName.trim() || codeLoading) return;
     setCodeLoading(true);
     setEditResult(null);
+    const jobId = startJob(issueId, issueTitle, codeContext, "code");
     try {
       const res = await ragApi.editCodeStream(repoName, codeContext, targetFile || undefined, pushToGithub);
       if (!res.ok) {
@@ -185,13 +231,18 @@ export default function OttoAIPanel() {
       for await (const event of streamSSE(res)) {
         if (event.type === "token") {
           content += event.content ?? "";
-          setEditResult({ modified_code: content, file: targetFile || "", instruction: codeContext, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null });
+          const partial = { modified_code: content, file: targetFile || "", instruction: codeContext, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null };
+          setEditResult(partial);
         } else if (event.type === "error") {
           throw new Error(event.message);
         }
       }
+      const finalResult = { modified_code: content, file: targetFile || "", instruction: codeContext, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null };
+      finishJob(jobId, "done", { codeResult: finalResult });
     } catch (err: unknown) {
-      setEditResult({ modified_code: err instanceof Error ? `Error: ${err.message}` : "Something went wrong.", file: "", instruction: codeContext, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null });
+      const errorResult = { modified_code: err instanceof Error ? `Error: ${err.message}` : "Something went wrong.", file: "", instruction: codeContext, chunks_analyzed: 0, detected_file: null, detection_confidence: null, github_pr: null, github_branch: null, pushed_by: null };
+      setEditResult(errorResult);
+      finishJob(jobId, "error", { codeResult: errorResult });
     } finally {
       setCodeLoading(false);
     }
@@ -201,6 +252,7 @@ export default function OttoAIPanel() {
     if (!repoName.trim() || docsLoading) return;
     setDocsLoading(true);
     setDocsResult("");
+    const jobId = startJob(issueId, issueTitle, docType, "docs");
     try {
       const res = await ragApi.generateDocsStream(repoName, docType, docTarget || undefined, pushToGithub);
       if (!res.ok) {
@@ -208,15 +260,20 @@ export default function OttoAIPanel() {
         const detail = typeof error.detail === "string" ? error.detail : `Request failed: ${res.status}`;
         throw new Error(detail);
       }
+      let content = "";
       for await (const event of streamSSE(res)) {
         if (event.type === "token") {
-          setDocsResult(prev => prev + (event.content ?? ""));
+          content += event.content ?? "";
+          setDocsResult(content);
         } else if (event.type === "error") {
           throw new Error(event.message);
         }
       }
+      finishJob(jobId, "done", { docsResult: content });
     } catch (err: unknown) {
-      setDocsResult(err instanceof Error ? `Error: ${err.message}` : "Something went wrong.");
+      const errorMsg = err instanceof Error ? `Error: ${err.message}` : "Something went wrong.";
+      setDocsResult(errorMsg);
+      finishJob(jobId, "error", { docsResult: errorMsg });
     } finally {
       setDocsLoading(false);
     }

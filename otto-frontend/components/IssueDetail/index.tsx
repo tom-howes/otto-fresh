@@ -223,7 +223,7 @@ export default function IssueDetail({ issue, workspaceId, members: membersProp, 
 
         <CommentsSection workspaceId={workspaceId} issueId={issue.id} members={members} initialComments={initialComments} />
 
-        {showOttoAI && <OttoAIPanel />}
+        {showOttoAI && <OttoAIPanel issueId={issue.id} issueTitle={issue.title} />}
       </div>
 
       <MetadataSidebar issue={issue} members={members} onUpdateIssue={onUpdateIssue} />

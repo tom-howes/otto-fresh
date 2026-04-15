@@ -11,12 +11,12 @@ const config = {
     return [
       {
         source: "/project",
-        destination: "/project/backlog",
+        destination: "/project/board",
         permanent: true,
       },
       {
         source: "/",
-        destination: "/project/backlog",
+        destination: "/project/board",
         permanent: true,
       },
     ];

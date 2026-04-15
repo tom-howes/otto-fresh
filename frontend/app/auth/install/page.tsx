@@ -23,7 +23,7 @@ const InstallPage = () => {
   };
 
   const handleSkip = () => {
-    router.replace("/project/backlog");
+    router.replace("/project/board");
   };
 
   return (
