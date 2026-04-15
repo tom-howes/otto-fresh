@@ -7,6 +7,7 @@ import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/context/AuthContext";
 import BoardView from "@/components/BoardView";
 import BacklogView from "@/components/BacklogView";
+import JobsView from "@/components/JobsView";
 import IssueDetail from "@/components/IssueDetail";
 import { workspaceApi, adaptIssue, BackendIssueUpdate, BackendComment } from "@/utils/api";
 import WorkspaceSetup from "@/components/WorkspaceSetup";
@@ -14,8 +15,8 @@ import WorkspaceSettings from "@/components/WorkspaceSettings";
 import WorkspacePicker from "@/components/WorkspacePicker";
 import { useJobs } from "@/context/JobsContext";
 
-type View = "Board" | "Issues";
-const NAV: View[] = ["Board", "Issues"];
+type View = "Board" | "Issues" | "Jobs";
+const NAV: View[] = ["Board", "Issues", "Jobs"];
 
 export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }) {
   const router = useRouter();
@@ -33,6 +34,11 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const { jobs } = useJobs();
   const runningJobs = jobs.filter(j => j.status === "running");
+
+  const handleSelectIssueById = (issueId: string) => {
+    const issue = issues.find(i => i.id === issueId);
+    if (issue) handleSelectIssue(issue);
+  };
 
 
   // Read from localStorage after mount to avoid SSR/hydration mismatch
@@ -171,7 +177,8 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
   const handleNav = (n: View) => {
     setView(n);
     setSelectedIssue(null);
-    router.push(n === "Board" ? "/project/board" : "/project/backlog");
+    if (n === "Board") router.push("/project/board");
+    else if (n === "Issues") router.push("/project/backlog");
   };
 
   return (
@@ -352,7 +359,10 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
         <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
           {selectedIssue
             ? selectedIssue.title
-            : view === "Board" ? "Active sprints" : view === "Issues" ? "All issues" : view}
+            : view === "Board" ? "Active sprints" 
+            : view === "Issues" ? "All issues" 
+            : view === "Jobs" ? "Jobs"
+            : view}
         </span>
       </div>
 
@@ -394,6 +404,7 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
           <>
             {view === "Board"  && <BoardView   issues={issues} loading={issuesLoading} search={search} members={members} onSelectIssue={handleSelectIssue} onCreateIssue={handleCreateIssue} onMoveIssue={handleMoveIssue} onDeleteIssue={handleDeleteIssue} />}
             {view === "Issues" && <BacklogView issues={issues} loading={issuesLoading} search={search} members={members} onSelectIssue={handleSelectIssue} onCreateIssue={handleCreateIssue} onDeleteIssue={handleDeleteIssue} />}
+            {view === "Jobs"   && <JobsView onSelectIssueById={handleSelectIssueById} />}
           </>
         ) : null}
       </div>

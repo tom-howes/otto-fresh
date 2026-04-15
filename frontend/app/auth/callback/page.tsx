@@ -22,7 +22,7 @@ const CallbackInner = () => {
 
       await refetchUser();
       await refetchWorkspaces();
-      router.replace("/project/board");
+      router.replace("/project/backlog");
     };
 
     void finishAuth();
