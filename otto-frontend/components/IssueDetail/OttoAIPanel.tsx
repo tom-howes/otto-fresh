@@ -63,11 +63,10 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
   
 
   const { startJob, appendChunk, finishJob, getJob } = useJobs();
-  const existingJob = getJob(issueId, "qa");
   const qaJob = getJob(issueId, "qa");
   const answer = qaJob?.answer ?? "";
   const asking = qaJob?.status === "running";
-  const [sources, setSources] = useState<{ file: string; lines: string }[]>([]);
+  const sources = qaJob?.sources ?? [];
 
   const codeJob = getJob(issueId, "code");
   const docsJob = getJob(issueId, "docs");
@@ -112,7 +111,7 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
 
   const handleAsk = async () => {
     if (!question.trim() || !repoName.trim() || asking || indexing) return;
-    setSources([]);
+
     setErrorMessage("");
 
     if (!isReady) {
@@ -144,7 +143,7 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
         if (event.type === "token") {
           appendChunk(jobId, event.content ?? "");
         } else if (event.type === "complete") {
-          setSources(event.sources || []);
+          finishJob(jobId, "running", { sources: event.sources || [] });
         } else if (event.type === "error") {
           throw new Error(event.message);
         }
@@ -335,7 +334,7 @@ export default function OttoAIPanel({ issueId, issueTitle }: { issueId: string; 
                 <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-gray-100 dark:bg-white/5">
                   {(["complete", "edit"] as const).map(m => (
                     <button key={m}
-                      onClick={() => { setCodeMode(m); setCompleteResult(null); setEditResult(null); }}
+                      onClick={() => { setCodeMode(m)}}
                       className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-semibold transition-all ${
                         codeMode === m
                           ? "bg-white dark:bg-white/10 text-gray-800 dark:text-gray-100 shadow-sm"

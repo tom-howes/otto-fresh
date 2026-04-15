@@ -15,6 +15,7 @@ export type Job = {
   searchResults?: { file_path: string; content: string; lines: string; language: string }[];
   codeResult?: unknown;
   docsResult?: string;
+  sources?: { file: string; lines: string }[];
 };
 
 type JobsContextType = {
