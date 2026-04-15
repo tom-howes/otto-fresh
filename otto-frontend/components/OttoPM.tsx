@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Issue } from "@/types";
 import { useTheme } from "@/components/ThemeProvider";
@@ -176,11 +177,15 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
       {/* ── Top Navbar ── */}
       <div className="flex h-12 shrink-0 items-center border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 shadow-sm">
         {/* Logo */}
-        <div className="flex items-center gap-2 mr-5">
-          <div className="h-7 w-7 rounded-xl bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-violet-200">
-            O
-          </div>
-          <span className="text-sm font-bold text-gray-800 dark:text-gray-100">Otto PM</span>
+        <div className="flex items-center mr-5">
+          <Image
+            src="/otto-logo.png"
+            alt="Otto"
+            width={64}
+            height={28}
+            className="h-7 w-auto dark:invert object-contain"
+            priority
+          />
         </div>
 
         <div className="h-4 w-px bg-gray-100 dark:bg-gray-700 mr-4" />

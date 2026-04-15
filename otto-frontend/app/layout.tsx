@@ -4,8 +4,13 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/context/AuthContext";
 
 export const metadata: Metadata = {
-  title: "Otto PM",
-  description: "Otto Project Management",
+  title: "Otto — AI-Powered Project Management",
+  description: "Otto connects to your GitHub repositories and uses RAG to answer questions, generate docs, complete code, and edit files — all in plain English.",
+  openGraph: {
+    title: "Otto — AI-Powered Project Management",
+    description: "Ask questions about your codebase, auto-generate docs, get intelligent code completions, and edit files with natural language. Built for software teams.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
