@@ -15,13 +15,14 @@ export type Job = {
   searchResults?: { file_path: string; content: string; lines: string; language: string }[];
   codeResult?: unknown;
   docsResult?: string;
+  sources?: { file: string; lines: string }[];
 };
 
 type JobsContextType = {
   jobs: Job[];
   startJob: (issueId: string, issueTitle: string, question: string, type: JobType) => string;
   appendChunk: (id: string, chunk: string) => void;
-  finishJob: (id: string, status: "done" | "error", result?: Partial<Job>) => void;
+  finishJob: (id: string, status: "running" | "done" | "error", result?: Partial<Job>) => void;
   getJob: (issueId: string, type: JobType) => Job | undefined;
 };
 
@@ -43,8 +44,8 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
     setJobs(prev => prev.map(j => j.id === id ? { ...j, answer: j.answer + chunk } : j));
   };
 
-  const finishJob = (id: string, status: "done" | "error", result?: Partial<Job>) => {
-    setJobs(prev => prev.map(j => 
+  const finishJob = (id: string, status: "running" | "done" | "error", result?: Partial<Job>) => {
+    setJobs(prev => prev.map(j =>
       j.id === id ? { ...j, status, ...result } : j
     ));
   };
