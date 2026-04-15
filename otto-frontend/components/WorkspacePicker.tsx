@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Workspace } from "@/context/AuthContext";
 
 interface WorkspacePickerProps {
@@ -14,8 +15,14 @@ export default function WorkspacePicker({ workspaces, onSelect }: WorkspacePicke
       <div className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-8 shadow-sm">
 
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-blue-500 text-xl font-bold text-white shadow-md shadow-violet-200">
-            O
+          <div className="mb-4">
+            <Image
+              src="/otto-logo.png"
+              alt="Otto"
+              width={80}
+              height={80}
+              className="h-14 w-auto dark:invert object-contain"
+            />
           </div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             Choose a workspace
