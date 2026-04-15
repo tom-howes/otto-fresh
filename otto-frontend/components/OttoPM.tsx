@@ -12,6 +12,7 @@ import { workspaceApi, adaptIssue, BackendIssueUpdate, BackendComment } from "@/
 import WorkspaceSetup from "@/components/WorkspaceSetup";
 import WorkspaceSettings from "@/components/WorkspaceSettings";
 import WorkspacePicker from "@/components/WorkspacePicker";
+import { useJobs } from "@/context/JobsContext";
 
 type View = "Board" | "Issues";
 const NAV: View[] = ["Board", "Issues"];
@@ -30,6 +31,9 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
   const [showWorkspaceSwitcher, setShowWorkspaceSwitcher] = useState(false);
   const switcherRef = useRef<HTMLDivElement>(null);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const { jobs } = useJobs();
+  const runningJobs = jobs.filter(j => j.status === "running");
+
 
   // Read from localStorage after mount to avoid SSR/hydration mismatch
   useEffect(() => {
@@ -240,6 +244,21 @@ export default function OttoPM({ defaultView = "Board" }: { defaultView?: View }
           </button>
 
           <div className="h-4 w-px bg-gray-100 dark:bg-gray-700" />
+
+          {/* Running jobs indicator */}
+          {runningJobs.length > 0 && (
+            <button
+              onClick={() => {
+                const job = runningJobs[0];
+                const issue = issues.find(i => i.id === job.issueId);
+                if (issue) handleSelectIssue(issue);
+              }}
+              className="flex items-center gap-1.5 rounded-lg bg-violet-50 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-700 px-2.5 py-1 text-xs font-medium text-violet-600 dark:text-violet-400"
+            >
+              <div className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse" />
+              {runningJobs.length} job{runningJobs.length > 1 ? "s" : ""} running
+            </button>
+          )}
 
           {/* Auth */}
           {loading ? (
