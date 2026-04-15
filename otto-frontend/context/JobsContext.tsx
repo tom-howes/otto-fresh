@@ -31,9 +31,9 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
   const [jobs, setJobs] = useState<Job[]>([]);
 
   const startJob = (issueId: string, issueTitle: string, question: string, type: JobType) => {
-    const id = `${issueId}-${type}`;
+    const id = `${issueId}-${type}-${Date.now()}`;
     setJobs(prev => [
-      ...prev.filter(j => !(j.issueId === issueId && j.type === type)),
+      ...prev,
       { id, issueId, issueTitle, status: "running", type, question, answer: "" }
     ]);
     return id;
@@ -49,8 +49,8 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
     ));
   };
 
-  const getJob = (issueId: string, type: JobType) => 
-    jobs.find(j => j.issueId === issueId && j.type === type);
+  const getJob = (issueId: string, type: JobType) =>
+    jobs.filter(j => j.issueId === issueId && j.type === type).at(-1);
 
   return (
     <JobsContext.Provider value={{ jobs, startJob, appendChunk, finishJob, getJob }}>
