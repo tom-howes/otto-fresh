@@ -126,8 +126,8 @@ jobs:
             --min-instances 1 \
             --set-env-vars "\
           GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},\
-          GCS_BUCKET_RAW=otto-pm-raw-repos,\
-          GCS_BUCKET_PROCESSED=otto-pm-processed-chunks,\
+          GCS_BUCKET_RAW=otto-fresh-raw-repos,\
+          GCS_BUCKET_PROCESSED=otto-fresh-processed-chunks,\
           GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
 
   validation:
