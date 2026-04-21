@@ -238,7 +238,7 @@ jobs:
           GCS_BUCKET_PROCESSED=otto-pm-processed-chunks,\
           INGEST_SERVICE_URL=${{ secrets.INGEST_SERVICE_URL }},\
           FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json,\
-          FIREBASE_PROJECT_ID=otto-pm,\
+          FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }},\
           GITHUB_PRIVATE_KEY_PATH=./github-private-key.pem,\
           GITHUB_APP_ID=${{ secrets.APP_ID }},\
           GITHUB_CLIENT_ID=${{ secrets.CLIENT_ID }},\
