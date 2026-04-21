@@ -123,6 +123,7 @@ jobs:
             --allow-unauthenticated \
             --memory 2Gi \
             --timeout 3600 \
+            --min-instances 1 \
             --set-env-vars "\
           GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},\
           GCS_BUCKET_RAW=otto-pm-raw-repos,\
@@ -279,7 +280,7 @@ jobs:
             --allow-unauthenticated \
             --memory 512Mi \
             --timeout 3600 \
-            --set-env-vars "NEXT_PUBLIC_API_URL=${{ secrets.BACKEND_SERVICE_URL }},\
+            --build-env-vars "NEXT_PUBLIC_API_URL=${{ secrets.PUBLIC_API_URL }},\
             NEXT_PUBLIC_GH_APP_SLUG=${{ secrets.GH_APP_SLUG }}"
 
   notify:
