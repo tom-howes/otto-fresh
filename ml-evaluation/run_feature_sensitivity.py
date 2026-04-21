@@ -27,8 +27,8 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 # ── Config ──────────────────────────────────────────────────────────────────────
 
-INGEST_SERVICE_URL = "https://ingest-service-484671782718.us-east1.run.app"
-REPO = "otto-pm/otto"
+INGEST_SERVICE_URL = os.environ.get("INGEST_SERVICE_URL", "https://ingest-service-484671782718.us-east1.run.app")
+REPO = os.environ.get("EVAL_REPO", "otto-pm/otto")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 EXPERIMENTS_LOG = os.path.join(os.path.dirname(__file__), "experiments", "experiments.jsonl")
 

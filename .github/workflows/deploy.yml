@@ -136,8 +136,10 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GH_PAT }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GCP_PROJECT_ID: GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: us-east1
+      INGEST_SERVICE_URL: ${{ secrets.INGEST_SERVICE_URL}}
+      EVAL_REPO: ${{ secrets.EVAL_REPO }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -169,8 +171,10 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GH_PAT }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GCP_PROJECT_ID: GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: us-east1
+      INGEST_SERVICE_URL: ${{ secrets.INGEST_SERVICE_URL}}
+      EVAL_REPO: ${{ secrets.EVAL_REPO }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
