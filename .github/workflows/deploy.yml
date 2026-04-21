@@ -280,8 +280,7 @@ jobs:
             --allow-unauthenticated \
             --memory 512Mi \
             --timeout 3600 \
-            --set-build-env-vars "NEXT_PUBLIC_API_URL=${{ secrets.PUBLIC_API_URL }},\
-            NEXT_PUBLIC_GH_APP_SLUG=${{ secrets.GH_APP_SLUG }}"
+            --set-build-env-vars "NEXT_PUBLIC_API_URL=${{ secrets.PUBLIC_API_URL }},NEXT_PUBLIC_GH_APP_SLUG=${{ secrets.GH_APP_SLUG }}"
 
   notify:
     name: Send Summary Email
