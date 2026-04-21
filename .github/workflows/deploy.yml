@@ -31,11 +31,16 @@ jobs:
         run: |
           cd style-checker
           python style-checker.py ../Data-Pipeline
+
   data-pipeline:
     name: Data Pipeline Full Run
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GCS_BUCKET_RAW: otto-fresh-raw-repos
+      GCS_BUCKET_PROCESSED: otto-fresh-processed-chunks
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -139,7 +144,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: us-east1
-      INGEST_SERVICE_URL: ${{ secrets.INGEST_SERVICE_URL}}
+      INGEST_SERVICE_URL: ${{ secrets.INGEST_SERVICE_URL }}
       EVAL_REPO: ${{ secrets.EVAL_REPO }}
     steps:
       - name: Checkout code
@@ -153,7 +158,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13.12'
+          python-version: '3.13'
 
       - name: Install dependencies
         run: |
@@ -174,7 +179,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: us-east1
-      INGEST_SERVICE_URL: ${{ secrets.INGEST_SERVICE_URL}}
+      INGEST_SERVICE_URL: ${{ secrets.INGEST_SERVICE_URL }}
       EVAL_REPO: ${{ secrets.EVAL_REPO }}
     steps:
       - name: Checkout code
@@ -188,7 +193,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13.12'
+          python-version: '3.13'
 
       - name: Install dependencies
         run: |
@@ -239,8 +244,8 @@ jobs:
             --timeout 3600 \
             --set-env-vars "\
           GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},\
-          GCS_BUCKET_RAW=otto-pm-raw-repos,\
-          GCS_BUCKET_PROCESSED=otto-pm-processed-chunks,\
+          GCS_BUCKET_RAW=otto-fresh-raw-repos,\
+          GCS_BUCKET_PROCESSED=otto-fresh-processed-chunks,\
           INGEST_SERVICE_URL=${{ secrets.INGEST_SERVICE_URL }},\
           FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json,\
           FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }},\
@@ -286,7 +291,7 @@ jobs:
     name: Send Summary Email
     runs-on: ubuntu-latest
     needs: [lint, data-pipeline, test, deploy-ingest, deploy-backend, deploy-frontend]
-    if: always()  # always runs even if previous jobs failed
+    if: always()
     steps:
       - name: Set status
         id: status
