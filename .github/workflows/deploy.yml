@@ -124,7 +124,7 @@ jobs:
             --memory 2Gi \
             --timeout 300 \
             --set-env-vars "\
-          GCP_PROJECT_ID=otto-pm,\
+          GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},\
           GCS_BUCKET_RAW=otto-pm-raw-repos,\
           GCS_BUCKET_PROCESSED=otto-pm-processed-chunks,\
           GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
@@ -136,7 +136,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GH_PAT }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GCP_PROJECT_ID: otto-pm
+      GCP_PROJECT_ID: GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: us-east1
     steps:
       - name: Checkout code
@@ -169,7 +169,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GH_PAT }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GCP_PROJECT_ID: otto-pm
+      GCP_PROJECT_ID: GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: us-east1
     steps:
       - name: Checkout code
@@ -233,7 +233,7 @@ jobs:
             --memory 1Gi \
             --timeout 300 \
             --set-env-vars "\
-          GCP_PROJECT_ID=otto-pm,\
+          GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},\
           GCS_BUCKET_RAW=otto-pm-raw-repos,\
           GCS_BUCKET_PROCESSED=otto-pm-processed-chunks,\
           INGEST_SERVICE_URL=${{ secrets.INGEST_SERVICE_URL }},\
