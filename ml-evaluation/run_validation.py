@@ -18,6 +18,8 @@ import json
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
+import traceback
+import time
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
@@ -65,21 +67,49 @@ VALIDATION_QUERIES = [
 # ── Query the RAG endpoint ─────────────────────────────────────────────────────
 
 def query_rag(question: str) -> dict:
-    try:
-        response = requests.post(
-            f"{INGEST_SERVICE_URL}/pipeline/ask",
-            json={
-                "repo_full_name": REPO,
-                "question": question,
-                "github_token": GITHUB_TOKEN,
-            },
-            timeout=60
-        )
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print(f"Request failed: {e}")
-        return {"answer": "", "sources": [], "chunks_used": 0}
+    for attempt in range(3):
+        start = time.time()
+        try:
+            response = requests.post(
+                f"{INGEST_SERVICE_URL}/pipeline/ask",
+                json={
+                    "repo_full_name": REPO,
+                    "question": question,
+                    "github_token": GITHUB_TOKEN,
+                },
+                timeout=120
+            )
+            elapsed = time.time() - start
+            print(f"  Request completed in {elapsed:.1f}s, status={response.status_code}")
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.Timeout:
+            elapsed = time.time() - start
+            print(f"  TIMEOUT after {elapsed:.1f}s (attempt {attempt + 1}/3)")
+
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response else "unknown"
+            print(f"  HTTP ERROR {status} (attempt {attempt + 1}/3): {e}")
+            if status == 429:
+                print(f"  RATE LIMITED — waiting 30s before retry")
+                time.sleep(30)
+                continue
+
+        except requests.exceptions.ConnectionError as e:
+            print(f"  CONNECTION ERROR (attempt {attempt + 1}/3): {e}")
+
+        except Exception as e:
+            print(f"  UNEXPECTED ERROR ({type(e).__name__}) (attempt {attempt + 1}/3): {e}")
+            traceback.print_exc()
+
+        if attempt < 2:
+            wait = 10 * (attempt + 1)
+            print(f"  Retrying in {wait}s...")
+            time.sleep(wait)
+
+    print(f"  All 3 attempts failed for question: {question}")
+    return {"answer": "", "sources": [], "chunks_used": 0}
 
 
 # ── RAGAS Evaluation ───────────────────────────────────────────────────────────
