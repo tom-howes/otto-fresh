@@ -122,7 +122,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --memory 2Gi \
-            --timeout 300 \
+            --timeout 3600 \
             --set-env-vars "\
           GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},\
           GCS_BUCKET_RAW=otto-pm-raw-repos,\
@@ -231,7 +231,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --memory 1Gi \
-            --timeout 300 \
+            --timeout 3600 \
             --set-env-vars "\
           GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},\
           GCS_BUCKET_RAW=otto-pm-raw-repos,\
@@ -273,7 +273,8 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --memory 512Mi \
-            --timeout 300
+            --timeout 3600 \
+            --set-env-vars "NEXT_PUBLIC_API_URL=${{ secrets.PUBLIC_API_URL }}"
 
   notify:
     name: Send Summary Email

@@ -36,7 +36,8 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 }
 
 export function streamFetch(path: string, body: object): Promise<Response> {
-  return fetch(`${API_URL}${path}`, {
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "";
+  return fetch(`${backendUrl}${path}`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
