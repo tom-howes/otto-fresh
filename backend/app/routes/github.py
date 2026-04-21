@@ -8,6 +8,7 @@ from app.clients.github import (
 )
 from app.models import User
 from app.models import GitHubRepo
+import os
 
 router = APIRouter(prefix="/github", tags=["GitHub"])
 
@@ -20,7 +21,8 @@ async def install_github_app(current_user: User = Depends(
     Returns:
         Redirect to GitHub App installation page.
     """
-    install_url = "https://github.com/apps/otto-pm/installations/new"
+    app_slug = os.environ.get("GH_APP_SLUG", "otto-pm")
+    install_url = f"https://github.com/apps/{app_slug}/installations/new"
     return RedirectResponse(url=install_url)
 
 

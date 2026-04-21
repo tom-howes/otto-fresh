@@ -30,7 +30,7 @@ ENV_VARS = " ".join([
     'GCS_BUCKET_RAW="${GCS_BUCKET_RAW}"',
     'GCS_BUCKET_PROCESSED="${GCS_BUCKET_PROCESSED}"',
     'VERTEX_LOCATION="${VERTEX_LOCATION}"',
-    'OTTO_REPO="otto-pm/otto"',
+    'OTTO_REPO="otto-pm/otto"', # Choose the name of your repository
     'GOOGLE_APPLICATION_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS}"',
 ])
 

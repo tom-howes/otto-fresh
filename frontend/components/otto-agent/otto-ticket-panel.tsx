@@ -449,7 +449,7 @@ export const OttoTicketPanel: React.FC<{ issue: IssueType }> = ({ issue }) => {
                       </button>
                       <div className="text-xs text-gray-400">or</div>
                       <a
-                        href="https://github.com/apps/otto-pm/installations/new"
+                        href={`https://github.com/apps/${process.env.NEXT_PUBLIC_GH_APP_SLUG}/installations/new`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-3 py-1.5 text-xs text-white hover:bg-gray-800"
