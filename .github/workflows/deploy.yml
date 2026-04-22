@@ -39,8 +39,8 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GH_PAT }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GCS_BUCKET_RAW: otto-fresh-raw-repos
-      GCS_BUCKET_PROCESSED: otto-fresh-processed-chunks
+      GCS_BUCKET_RAW: otto-pm-raw-repos
+      GCS_BUCKET_PROCESSED: otto-pm-processed-chunks
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
