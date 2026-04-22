@@ -131,8 +131,8 @@ jobs:
             --min-instances 1 \
             --set-env-vars "\
           GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},\
-          GCS_BUCKET_RAW=otto-fresh-raw-repos,\
-          GCS_BUCKET_PROCESSED=otto-fresh-processed-chunks,\
+          GCS_BUCKET_RAW=otto-pm-raw-repos,\
+          GCS_BUCKET_PROCESSED=otto-pm-processed-chunks,\
           GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
 
   validation:
@@ -244,8 +244,8 @@ jobs:
             --timeout 3600 \
             --set-env-vars "\
           GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},\
-          GCS_BUCKET_RAW=otto-fresh-raw-repos,\
-          GCS_BUCKET_PROCESSED=otto-fresh-processed-chunks,\
+          GCS_BUCKET_RAW=otto-pm-raw-repos,\
+          GCS_BUCKET_PROCESSED=otto-pm-processed-chunks,\
           INGEST_SERVICE_URL=${{ secrets.INGEST_SERVICE_URL }},\
           FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json,\
           FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }},\
