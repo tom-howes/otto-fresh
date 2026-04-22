@@ -59,7 +59,12 @@ jobs:
         run: |
           cd Data-Pipeline
           pip install -r requirements.txt
-
+      - name: Debug environment
+        run: |
+          echo "GCP_PROJECT_ID=$GCP_PROJECT_ID"
+          echo "GCS_BUCKET_RAW=$GCS_BUCKET_RAW"
+          echo "GCS_BUCKET_PROCESSED=$GCS_BUCKET_PROCESSED"
+          python -c "import os; print('Python GCP_PROJECT_ID:', os.getenv('GCP_PROJECT_ID', 'NOT SET'))"
       - name: Run pipeline (ingest, chunk, embed, validate)
         run: |
           cd Data-Pipeline
